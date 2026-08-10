@@ -1102,25 +1102,31 @@ td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}
 td.name-col{text-align:left}
 tr:nth-child(even) td{background:#f5f5f5}
 .low{color:#c00;font-weight:700}.med{color:#7a4800;font-weight:700}.ok{color:#155724}
-.sign{margin-top:40px;display:flex;justify-content:space-between}
-.sign div{text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px}
-.footer{margin-top:10px;font-size:10px;color:#666;text-align:right}
-.legend{margin-top:8px;font-size:10px;color:#444;display:flex;gap:16px}
+.sign{margin-top:40px;display:flex;justify-content:space-between;align-items:flex-end}
+.sign-box{text-align:center;min-width:180px}
+.sign-box .line{border-top:1px solid #000;padding-top:4px;font-size:11px;font-weight:700}
+.sign-box .sub-label{font-size:10px;color:#444;margin-top:2px}
+.footer{margin-top:12px;font-size:10px;color:#666;text-align:right}
 @page{margin:14mm 12mm;size:A4 portrait}
 </style></head><body>
 <div class="header">
-  <h1>${inst}</h1><h2>${bname} &mdash; Trade: ${trade}</h2>
+  <h1>${inst}</h1>
+  <h2>Trade: ${trade} &mdash; ${bname}</h2>
   <h3>Monthly Attendance Register &mdash; ${MONTHS[month]} ${year}</h3>
-  <hr><div class="sub">Academic Year: ${acYear} &nbsp;|&nbsp; Instructor: ${instructor}</div>
+  <hr>
+  <div class="sub">Academic Year: ${acYear} &nbsp;|&nbsp; ${instructor} (Instructor)</div>
 </div>
 <table><thead>
   <tr><th rowspan="2">Sl</th><th rowspan="2">Adm No</th><th rowspan="2" style="text-align:left;min-width:140px">Name</th>
   <th colspan="2">This Month</th><th colspan="2">Cumulative</th><th rowspan="2">%</th><th rowspan="2">Remark</th></tr>
   <tr><th>Possible</th><th>Present</th><th>Possible</th><th>Present</th></tr>
 </thead><tbody>${rows}</tbody></table>
-<div class="legend"><span>P = Present &nbsp; A = Absent &nbsp; CL = Casual Leave &nbsp; ML = Medical Leave</span>
-<span style="margin-left:auto;color:#c00">Below ${PCT_WARN}% flagged</span></div>
-<div class="sign"><div>Date: ${now}</div><div>Class Teacher / Instructor</div><div>Principal</div></div>
+<div class="sign">
+  <div class="sign-box"><div class="line">Date: ${now}</div></div>
+  <div class="sign-box"><div class="line">${instructor}</div><div class="sub-label">(Instructor)</div></div>
+  <div class="sign-box"><div class="line">Group Instructor</div></div>
+  <div class="sign-box"><div class="line">Principal</div></div>
+</div>
 <div class="footer">Printed on ${now} &mdash; ITI Attendance System</div>
 <script>window.onload=()=>{window.print()}<\/script></body></html>`);
   win.document.close();
@@ -1153,6 +1159,7 @@ body{font-family:Arial,sans-serif;font-size:12px;color:#000;padding:16px}
 .header h2{font-size:14px;font-weight:700;margin:3px 0}
 .header h3{font-size:12px;font-weight:600;margin:2px 0}
 .header hr{border:none;border-top:2px solid #000;margin:7px 0 4px}
+.header .sub{font-size:11px;color:#333;margin-top:2px}
 table{width:100%;border-collapse:collapse;margin-top:8px}
 th{border:1px solid #888;padding:5px 6px;font-size:10px;font-weight:700;text-align:center;background:#d0d0d0}
 th.h1{background:#b8d4ee}th.h2{background:#b8e0c4}
@@ -1160,17 +1167,24 @@ td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}
 td.name-col{text-align:left}
 tr:nth-child(even) td{background:#f5f5f5}
 .low{color:#c00;font-weight:700}.med{color:#7a4800;font-weight:700}.ok{color:#155724}
-.sign{margin-top:40px;display:flex;justify-content:space-between}
-.sign div{text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px}
-.footer{margin-top:10px;font-size:10px;color:#666;text-align:right}
+.sign{margin-top:40px;display:flex;justify-content:space-between;align-items:flex-end}
+.sign-box{text-align:center;min-width:160px}
+.sign-box .line{border-top:1px solid #000;padding-top:4px;font-size:11px;font-weight:700}
+.sign-box .sub-label{font-size:10px;color:#444;margin-top:2px}
+.footer{margin-top:12px;font-size:10px;color:#666;text-align:right}
 .period{font-size:10px;color:#444;margin-top:6px;display:flex;gap:24px;justify-content:center}
 @page{margin:14mm 12mm;size:A4 landscape}
 </style></head><body>
 <div class="header">
-  <h1>${inst}</h1><h2>${bname} &mdash; Trade: ${trade}</h2>
+  <h1>${inst}</h1>
+  <h2>Trade: ${trade} &mdash; ${bname}</h2>
   <h3>Half-Year Attendance Summary &mdash; Academic Year: ${acYear}</h3>
-  <hr><div class="period"><span><strong>H1:</strong> ${h1s} to ${h1e}</span>
-  <span><strong>H2:</strong> ${h2s} to ${h2e}</span><span>Instructor: ${instructor}</span></div>
+  <hr>
+  <div class="sub">${instructor} (Instructor)</div>
+  <div class="period">
+    <span><strong>H1 (First Half):</strong> ${h1s} to ${h1e}</span>
+    <span><strong>H2 (Second Half):</strong> ${h2s} to ${h2e}</span>
+  </div>
 </div>
 <table><thead>
   <tr><th rowspan="2">Sl</th><th rowspan="2">Adm No</th><th rowspan="2" style="text-align:left;min-width:150px">Name</th>
@@ -1178,8 +1192,12 @@ tr:nth-child(even) td{background:#f5f5f5}
   <tr><th class="h1">Possible</th><th class="h1">Present</th><th class="h1">%</th>
   <th class="h2">Possible</th><th class="h2">Present</th><th class="h2">%</th></tr>
 </thead><tbody>${rows}</tbody></table>
-<div style="margin-top:6px;font-size:10px;color:#c00">Students below ${PCT_WARN}% highlighted in red.</div>
-<div class="sign"><div>Date: ${now}</div><div>Class Teacher / Instructor</div><div>Principal</div></div>
+<div class="sign">
+  <div class="sign-box"><div class="line">Date: ${now}</div></div>
+  <div class="sign-box"><div class="line">${instructor}</div><div class="sub-label">(Instructor)</div></div>
+  <div class="sign-box"><div class="line">Group Instructor</div></div>
+  <div class="sign-box"><div class="line">Principal</div></div>
+</div>
 <div class="footer">Printed on ${now} &mdash; ITI Attendance System</div>
 <script>window.onload=()=>{window.print()}<\/script></body></html>`);
   win.document.close();
