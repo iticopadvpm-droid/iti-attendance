@@ -169,7 +169,8 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 <!-- Firebase SDKs -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         sendPasswordResetEmail, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
          collection, getDocs, writeBatch, query, where }
@@ -199,6 +200,11 @@ const MONTHS = ["January","February","March","April","May","June",
                 "July","August","September","October","November","December"];
 const SESS = ["P","A","CL","ML"];
 const SESS_LABEL = { P:"Present", A:"Absent", CL:"Casual Leave", ML:"Medical Leave" };
+const POSITIONS = [
+  {val:"SI",  label:"Senior Instructor"},
+  {val:"JI",  label:"Junior Instructor"},
+  {val:"WSA", label:"Workshop Attender"}
+];
 const PCT_WARN = 80;
 const TODAY = new Date();
 
@@ -218,6 +224,8 @@ let S = {
   monthRep: { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth() },
   hrState: { batchId:"", h1s:"", h1e:"", h2s:"", h2e:"" },
   syncStatus: "ok",     // ok | syncing | error
+  // print overrides (editable on report pages, not saved to profile)
+  printDetails: { name:"", position:"SI", trade:"", printDate:true }
 };
 
 let lastMonthlyData=null, lastMonthlyMeta=null;
@@ -452,12 +460,17 @@ onAuthStateChanged(auth, async (user) => {
     try {
       S.profile = await loadProfile();
       if (!S.profile) {
-        // First time — show profile setup
         setLoading(false);
         renderProfileSetup();
         return;
       }
-      // Has profile — show PIN screen
+      // Sync printDetails from profile
+      S.printDetails = {
+        name: S.profile.name||"",
+        position: S.profile.position||"SI",
+        trade: S.profile.trade||"",
+        printDate: true
+      };
       setLoading(false);
       renderPin("");
     } catch(e) {
@@ -484,104 +497,166 @@ function renderRoot(){
 }
 
 // ============================================================
-// LOGIN SCREEN
+// LOGIN SCREEN — Email / Password
 // ============================================================
-function renderLogin(){
+function renderLogin(mode="login"){
   document.getElementById("root").innerHTML=`
 <div class="login-screen">
   <div class="login-card">
     <div class="login-logo">🏫</div>
-    <h1 style="font-size:22px;margin-bottom:6px">ITI Attendance</h1>
+    <h1 style="font-size:22px;margin-bottom:4px">ITI Attendance</h1>
     <p class="text-sm text-muted mb20">Govt ITI Dhanuvachapuram</p>
-    <p class="text-secondary mb20" style="font-size:13px;line-height:1.6">
-      Sign in with your Google account.<br>Your data is private and secure.
-    </p>
-    <button class="btn-google" id="btn-google-signin">
-      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
-      Sign in with Google
-    </button>
+
+    <div id="login-tabs" class="flex mb16" style="border-bottom:1px solid var(--border);gap:0">
+      <button id="tab-login" style="flex:1;padding:8px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid ${mode==="login"?"var(--accent)":"transparent"};color:${mode==="login"?"var(--accent)":"var(--text3)"}" onclick="switchTab('login')">Sign In</button>
+      <button id="tab-register" style="flex:1;padding:8px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid ${mode==="register"?"var(--accent)":"transparent"};color:${mode==="register"?"var(--accent)":"var(--text3)"}" onclick="switchTab('register')">Register</button>
+      <button id="tab-forgot" style="flex:1;padding:8px;border:none;background:none;font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid ${mode==="forgot"?"var(--accent)":"transparent"};color:${mode==="forgot"?"var(--accent)":"var(--text3)"}" onclick="switchTab('forgot')">Forgot</button>
+    </div>
+
+    <!-- SIGN IN -->
+    <div id="panel-login" style="display:${mode==="login"?"block":"none"}">
+      <div class="form-group"><label class="form-label">Email</label><input id="li-email" type="email" placeholder="your@email.com" autocomplete="email"/></div>
+      <div class="form-group"><label class="form-label">Password</label><input id="li-pass" type="password" placeholder="Password" autocomplete="current-password"/></div>
+      <button class="btn btn-primary" id="btn-login" style="width:100%">Sign In</button>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="panel-register" style="display:${mode==="register"?"block":"none"}">
+      <div class="form-group"><label class="form-label">Full name</label><input id="rg-name" placeholder="e.g. DINOJ M KHAN"/></div>
+      <div class="form-group"><label class="form-label">Institute</label><input id="rg-inst" value="Govt ITI Dhanuvachapuram"/></div>
+      <div class="form-group"><label class="form-label">Trade</label><input id="rg-trade" placeholder="e.g. COPA, Electrician"/></div>
+      <div class="form-group"><label class="form-label">Position</label>
+        <select id="rg-pos">${POSITIONS.map(p=>`<option value="${p.val}">${p.label} (${p.val})</option>`).join("")}</select>
+      </div>
+      <div class="form-group"><label class="form-label">Email</label><input id="rg-email" type="email" placeholder="your@email.com" autocomplete="email"/></div>
+      <div class="grid2" style="gap:8px">
+        <div class="form-group"><label class="form-label">Password</label><input id="rg-pass" type="password" placeholder="Min 6 characters" autocomplete="new-password"/></div>
+        <div class="form-group"><label class="form-label">Confirm password</label><input id="rg-pass2" type="password" placeholder="Repeat" autocomplete="new-password"/></div>
+      </div>
+      <div class="grid2" style="gap:8px">
+        <div class="form-group"><label class="form-label">4-digit PIN</label><input id="rg-pin" type="password" maxlength="4" inputmode="numeric" placeholder="e.g. 1234"/></div>
+        <div class="form-group"><label class="form-label">Confirm PIN</label><input id="rg-pin2" type="password" maxlength="4" inputmode="numeric" placeholder="repeat"/></div>
+      </div>
+      <p class="text-xs text-muted mb8">PIN is used to protect daily attendance marking.</p>
+      <button class="btn btn-primary" id="btn-register" style="width:100%">Create Account</button>
+    </div>
+
+    <!-- FORGOT PASSWORD -->
+    <div id="panel-forgot" style="display:${mode==="forgot"?"block":"none"}">
+      <p class="text-sm text-muted mb12">Enter your registered email. We will send a password reset link.</p>
+      <div class="form-group"><label class="form-label">Email</label><input id="fg-email" type="email" placeholder="your@email.com"/></div>
+      <button class="btn btn-primary" id="btn-forgot" style="width:100%">Send Reset Link</button>
+      <p id="fg-ok" class="text-sm text-success mt8" style="display:none">Reset link sent! Check your email.</p>
+    </div>
+
     <p id="login-err" class="text-sm text-danger mt8" style="display:none"></p>
   </div>
 </div>`;
-  document.getElementById("btn-google-signin").addEventListener("click", async()=>{
-    const errEl = document.getElementById("login-err");
-    errEl.style.display="none";
-    try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
-    } catch(e) {
-      errEl.textContent = e.code==="auth/popup-closed-by-user" ? "Sign-in cancelled." : "Sign-in failed: "+e.message;
-      errEl.style.display="block";
+
+  window.switchTab = (tab) => renderLogin(tab);
+
+  const errEl = document.getElementById("login-err");
+  const showErr = (msg) => { errEl.textContent=msg; errEl.style.display="block"; };
+  const hideErr = () => { errEl.style.display="none"; };
+
+  // Sign in
+  document.getElementById("btn-login")?.addEventListener("click", async()=>{
+    hideErr();
+    const email=document.getElementById("li-email").value.trim();
+    const pass=document.getElementById("li-pass").value;
+    if(!email||!pass){showErr("Enter email and password");return;}
+    setLoading(true);
+    try{ await signInWithEmailAndPassword(auth,email,pass); }
+    catch(e){
+      const msg={
+        "auth/invalid-credential":"Incorrect email or password.",
+        "auth/user-not-found":"No account with this email.",
+        "auth/wrong-password":"Incorrect password.",
+        "auth/invalid-email":"Invalid email address.",
+        "auth/too-many-requests":"Too many attempts. Try again later."
+      }[e.code]||e.message;
+      showErr(msg);
     }
+    finally{setLoading(false);}
   });
+
+  // Register
+  document.getElementById("btn-register")?.addEventListener("click", async()=>{
+    hideErr();
+    const name=document.getElementById("rg-name").value.trim().toUpperCase();
+    const inst=document.getElementById("rg-inst").value.trim();
+    const trade=document.getElementById("rg-trade").value.trim().toUpperCase();
+    const pos=document.getElementById("rg-pos").value;
+    const email=document.getElementById("rg-email").value.trim();
+    const pass=document.getElementById("rg-pass").value;
+    const pass2=document.getElementById("rg-pass2").value;
+    const pin=document.getElementById("rg-pin").value.trim();
+    const pin2=document.getElementById("rg-pin2").value.trim();
+    if(!name){showErr("Enter your name");return;}
+    if(!trade){showErr("Enter your trade");return;}
+    if(!email){showErr("Enter email");return;}
+    if(pass.length<6){showErr("Password must be at least 6 characters");return;}
+    if(pass!==pass2){showErr("Passwords do not match");return;}
+    if(!/^\d{4}$/.test(pin)){showErr("PIN must be exactly 4 digits");return;}
+    if(pin!==pin2){showErr("PINs do not match");return;}
+    setLoading(true,"Creating account...");
+    try{
+      const cred = await createUserWithEmailAndPassword(auth,email,pass);
+      const pinHash = await hashPin(pin);
+      await saveProfile({ name, institute:inst, trade, position:pos, pinHash, email, created:Date.now() });
+      S.isUnlocked=true;
+      await loadAll();
+      renderApp();
+    }catch(e){
+      const msg={
+        "auth/email-already-in-use":"This email is already registered. Sign in instead.",
+        "auth/invalid-email":"Invalid email address.",
+        "auth/weak-password":"Password is too weak."
+      }[e.code]||e.message;
+      showErr(msg);
+    }
+    finally{setLoading(false);}
+  });
+
+  // Forgot password
+  document.getElementById("btn-forgot")?.addEventListener("click", async()=>{
+    hideErr();
+    const email=document.getElementById("fg-email").value.trim();
+    if(!email){showErr("Enter your email");return;}
+    setLoading(true);
+    try{
+      await sendPasswordResetEmail(auth,email);
+      document.getElementById("fg-ok").style.display="block";
+    }catch(e){
+      const msg={
+        "auth/user-not-found":"No account with this email.",
+        "auth/invalid-email":"Invalid email address."
+      }[e.code]||e.message;
+      showErr(msg);
+    }
+    finally{setLoading(false);}
+  });
+
+  // Enter key on password
+  document.getElementById("li-pass")?.addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("btn-login").click();});
 }
 
 // ============================================================
-// PROFILE SETUP (first time only)
+// PROFILE SETUP — handled during registration in renderLogin
+// If profile missing after login (edge case), show message
 // ============================================================
 function renderProfileSetup(){
-  const u = S.user;
+  // Should not normally happen — profile is created during registration
   document.getElementById("root").innerHTML=`
 <div class="pin-screen">
-  <div class="setup-card">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      ${u.photoURL?`<img src="${u.photoURL}" class="avatar" style="width:44px;height:44px">`:`<div class="avatar-initials" style="width:44px;height:44px;font-size:16px">${u.displayName?u.displayName[0]:"U"}</div>`}
-      <div>
-        <div class="fw500">${u.displayName||"Instructor"}</div>
-        <div class="text-sm text-muted">${u.email}</div>
-      </div>
-    </div>
-    <h2 class="mb16">Set up your profile</h2>
-    <div class="form-group">
-      <label class="form-label">Your name (as instructor)</label>
-      <input id="p-name" value="${u.displayName||""}" placeholder="Full name"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Institute name</label>
-      <input id="p-inst" value="Govt ITI Dhanuvachapuram" placeholder="Institute name"/>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Trade / Department</label>
-      <input id="p-trade" placeholder="e.g. COPA, Electrician"/>
-    </div>
-    <div class="grid2" style="gap:8px">
-      <div class="form-group">
-        <label class="form-label">Set 4-digit PIN</label>
-        <input id="p-pin" type="password" maxlength="4" inputmode="numeric" placeholder="e.g. 1234"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Confirm PIN</label>
-        <input id="p-pin2" type="password" maxlength="4" inputmode="numeric" placeholder="repeat"/>
-      </div>
-    </div>
-    <p class="text-xs text-muted mb16">PIN protects attendance marking. Anyone with the PIN can mark attendance on your behalf.</p>
-    <button class="btn btn-primary" id="btn-save-profile" style="width:100%">Save &amp; Continue</button>
-    <p id="p-err" class="text-sm text-danger mt8" style="display:none"></p>
-    <button class="btn btn-secondary btn-sm" id="btn-signout-setup" style="width:100%;margin-top:8px">Sign out</button>
+  <div class="setup-card" style="text-align:center">
+    <div style="font-size:36px;margin-bottom:16px">⚠️</div>
+    <h2 class="mb8">Profile not found</h2>
+    <p class="text-sm text-muted mb16">Your profile data could not be loaded.</p>
+    <button class="btn btn-primary" id="btn-signout-ps" style="width:100%">Sign out and try again</button>
   </div>
 </div>`;
-  document.getElementById("btn-save-profile").addEventListener("click", async()=>{
-    const name  = document.getElementById("p-name").value.trim();
-    const inst  = document.getElementById("p-inst").value.trim();
-    const trade = document.getElementById("p-trade").value.trim();
-    const pin   = document.getElementById("p-pin").value.trim();
-    const pin2  = document.getElementById("p-pin2").value.trim();
-    const errEl = document.getElementById("p-err");
-    errEl.style.display="none";
-    if(!name){ errEl.textContent="Enter your name"; errEl.style.display="block"; return; }
-    if(!/^\d{4}$/.test(pin)){ errEl.textContent="PIN must be exactly 4 digits"; errEl.style.display="block"; return; }
-    if(pin!==pin2){ errEl.textContent="PINs do not match"; errEl.style.display="block"; return; }
-    setLoading(true,"Saving profile...");
-    try {
-      const pinHash = await hashPin(pin);
-      await saveProfile({ name, institute:inst, trade, pinHash, email:S.user.email, created:Date.now() });
-      // Auto-unlock after setup
-      S.isUnlocked = true;
-      await loadAll();
-      renderApp();
-    } catch(e){ errEl.textContent="Error: "+e.message; errEl.style.display="block"; }
-    finally{ setLoading(false); }
-  });
-  document.getElementById("btn-signout-setup").addEventListener("click",()=>signOut(auth));
+  document.getElementById("btn-signout-ps").addEventListener("click",()=>signOut(auth));
 }
 
 // ============================================================
@@ -596,9 +671,10 @@ function renderPin(errorMsg){
 <div class="pin-screen">
   <div class="pin-card">
     <div style="text-align:center;margin-bottom:4px">
-      ${u&&u.photoURL?`<img src="${u.photoURL}" class="avatar" style="width:52px;height:52px;margin:0 auto 10px;display:block">`:`<div style="font-size:36px;margin-bottom:10px">🔐</div>`}
+      <div style="font-size:36px;margin-bottom:10px">🔐</div>
       <h2>${p.name||"ITI Attendance"}</h2>
       <p class="text-sm text-muted">${p.institute||"Govt ITI Dhanuvachapuram"}</p>
+      <p class="text-xs text-muted">${p.position?POSITIONS.find(x=>x.val===p.position)?.label+" &mdash; ":""} ${p.trade||""}</p>
       <p class="text-xs text-muted">${u?u.email:""}</p>
     </div>
     <p class="text-sm text-secondary" style="text-align:center;margin:14px 0 4px">Enter 4-digit PIN</p>
@@ -707,11 +783,11 @@ function renderApp(){
   <div class="sidebar">
     <div class="sidebar-logo">
       <div class="flex" style="gap:8px">
-        ${u&&u.photoURL?`<img src="${u.photoURL}" class="avatar">`:`<div class="avatar-initials">${p.name?p.name[0]:"I"}</div>`}
+        <div class="avatar-initials">${p.name?p.name[0]:"I"}</div>
         <div style="overflow:hidden">
           <div class="title fw600" style="font-size:13px">ITI Attendance</div>
           <div class="inst">${p.institute||"Govt ITI"}</div>
-          <div class="user">${p.name||""}</div>
+          <div class="user">${p.name||""} ${p.position?"("+p.position+")":""}</div>
         </div>
       </div>
     </div>
@@ -927,17 +1003,33 @@ ${students.length?`
 // ============================================================
 function renderMonthly(){
   const{batchId,year,month}=S.monthRep;
+  const pd=S.printDetails;
   const bOpts=S.batches.map(b=>`<option value="${b.id}"${batchId===b.id?" selected":""}>${b.name}</option>`).join("");
   const mOpts=MONTHS.map((m,i)=>`<option value="${i}"${month===i?" selected":""}>${m}</option>`).join("");
+  const posOpts=POSITIONS.map(p=>`<option value="${p.val}"${pd.position===p.val?" selected":""}>${p.label} (${p.val})</option>`).join("");
   return`
 <div class="card mb16">
   <div class="card-body">
-    <div class="flex flex-wrap" style="gap:10px;align-items:flex-end">
+    <div class="flex flex-wrap" style="gap:10px;align-items:flex-end;margin-bottom:14px">
       <div><label class="form-label">Batch</label><select style="width:210px" id="rep-batch">${bOpts}</select></div>
       <div><label class="form-label">Month</label><select style="width:130px" id="rep-month">${mOpts}</select></div>
       <div><label class="form-label">Year</label><input type="number" id="rep-year" value="${year}" style="width:85px"/></div>
-      <button class="btn btn-primary" style="margin-top:18px" data-action="load-monthly">Generate</button>
-      <button class="btn btn-secondary no-print" style="margin-top:18px" data-action="print-monthly" id="btn-print-monthly" disabled>🖨️ Print</button>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+      <div class="text-xs fw500 text-muted mb8" style="text-transform:uppercase;letter-spacing:.04em">Print details (editable)</div>
+      <div class="flex flex-wrap" style="gap:8px;align-items:flex-end">
+        <div><label class="form-label">Instructor name</label><input id="pd-name" value="${pd.name}" style="width:180px"/></div>
+        <div><label class="form-label">Position</label><select id="pd-pos" style="width:180px">${posOpts}</select></div>
+        <div><label class="form-label">Trade</label><input id="pd-trade" value="${pd.trade}" style="width:100px"/></div>
+        <div style="margin-top:20px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="pd-date" ${pd.printDate?"checked":""} style="width:auto;cursor:pointer"/>
+            Print today's date
+          </label>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:18px" data-action="load-monthly">Generate</button>
+        <button class="btn btn-secondary btn-sm no-print" style="margin-top:18px" data-action="print-monthly" id="btn-print-monthly" disabled>🖨️ Print</button>
+      </div>
     </div>
   </div>
 </div>
@@ -951,7 +1043,9 @@ function renderMonthly(){
 // ============================================================
 function renderHalfYear(){
   const{batchId,h1s,h1e,h2s,h2e}=S.hrState;
+  const pd=S.printDetails;
   const bOpts=S.batches.map(b=>`<option value="${b.id}"${batchId===b.id?" selected":""}>${b.name}</option>`).join("");
+  const posOpts=POSITIONS.map(p=>`<option value="${p.val}"${pd.position===p.val?" selected":""}>${p.label} (${p.val})</option>`).join("");
   return`
 <div class="card mb16">
   <div class="card-body">
@@ -972,9 +1066,21 @@ function renderHalfYear(){
         </div>
       </div>
     </div>
-    <div class="flex flex-end mt12" style="gap:8px">
-      <button class="btn btn-primary" data-action="load-halfyear">Calculate</button>
-      <button class="btn btn-secondary" data-action="print-halfyear" id="btn-print-halfyear" disabled>🖨️ Print</button>
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+      <div class="text-xs fw500 text-muted mb8" style="text-transform:uppercase;letter-spacing:.04em">Print details (editable)</div>
+      <div class="flex flex-wrap" style="gap:8px;align-items:flex-end">
+        <div><label class="form-label">Instructor name</label><input id="hr-pd-name" value="${pd.name}" style="width:180px"/></div>
+        <div><label class="form-label">Position</label><select id="hr-pd-pos" style="width:180px">${posOpts}</select></div>
+        <div><label class="form-label">Trade</label><input id="hr-pd-trade" value="${pd.trade}" style="width:100px"/></div>
+        <div style="margin-top:20px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="hr-pd-date" ${pd.printDate?"checked":""} style="width:auto;cursor:pointer"/>
+            Print today's date
+          </label>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:18px" data-action="load-halfyear">Calculate</button>
+        <button class="btn btn-secondary btn-sm" data-action="print-halfyear" id="btn-print-halfyear" disabled>🖨️ Print</button>
+      </div>
     </div>
   </div>
 </div>
@@ -988,16 +1094,18 @@ function renderHalfYear(){
 // ============================================================
 function renderSettings(){
   const p=S.profile||{}; const u=S.user||{};
+  const posLabel=POSITIONS.find(x=>x.val===p.position)?.label||p.position||"";
   return`
 <div class="card mb16">
   <div class="card-header"><h3>Profile</h3></div>
   <div class="card-body">
     <div class="flex mb16" style="gap:12px">
-      ${u.photoURL?`<img src="${u.photoURL}" class="avatar" style="width:48px;height:48px">`:`<div class="avatar-initials" style="width:48px;height:48px;font-size:18px">${p.name?p.name[0]:"I"}</div>`}
+      <div class="avatar-initials" style="width:48px;height:48px;font-size:18px">${p.name?p.name[0]:"I"}</div>
       <div>
-        <div class="fw500">${p.name||""}</div>
+        <div class="fw500">${p.name||""} ${p.position?"("+p.position+")":""}</div>
         <div class="text-sm text-muted">${u.email||""}</div>
         <div class="text-sm text-muted">${p.institute||""} &mdash; ${p.trade||""}</div>
+        <div class="text-sm text-muted">${posLabel}</div>
       </div>
     </div>
     <button class="btn btn-secondary btn-sm" data-action="edit-profile">Edit profile</button>
@@ -1075,9 +1183,15 @@ function printMonthlyReport(){
   if(!lastMonthlyData||!lastMonthlyMeta) return;
   const{batch,month,year}=lastMonthlyMeta;
   const inst=S.profile?.institute||"Govt ITI Dhanuvachapuram";
-  const instructor=S.profile?.name||"";
+  // Use editable print details
+  const pd=S.printDetails;
+  const instructor=pd.name||S.profile?.name||"";
+  const posCode=pd.position||S.profile?.position||"SI";
+  const printTrade=pd.trade||S.profile?.trade||"";
+  const instrLabel=`${instructor} (${posCode}, ${printTrade})`;
   const bname=batch?batch.name:""; const trade=batch?batch.trade:""; const acYear=batch?batch.year:"";
   const now=new Date().toLocaleDateString("en-IN");
+  const dateStr=pd.printDate?`Date: ${now}`:"Date:";
   const rows=lastMonthlyData.map((s,i)=>{
     const cls=s.pct<PCT_WARN?"low":s.pct<PCT_WARN+5?"med":"ok";
     const remark=s.pct<PCT_WARN?"Short":"";
@@ -1114,7 +1228,7 @@ tr:nth-child(even) td{background:#f5f5f5}
   <h2>Trade: ${trade} &mdash; ${bname}</h2>
   <h3>Monthly Attendance Register &mdash; ${MONTHS[month]} ${year}</h3>
   <hr>
-  <div class="sub">Academic Year: ${acYear} &nbsp;|&nbsp; ${instructor} (Instructor)</div>
+  <div class="sub">Academic Year: ${acYear} &nbsp;|&nbsp; ${instrLabel}</div>
 </div>
 <table><thead>
   <tr><th rowspan="2">Sl</th><th rowspan="2">Adm No</th><th rowspan="2" style="text-align:left;min-width:140px">Name</th>
@@ -1122,8 +1236,8 @@ tr:nth-child(even) td{background:#f5f5f5}
   <tr><th>Possible</th><th>Present</th><th>Possible</th><th>Present</th></tr>
 </thead><tbody>${rows}</tbody></table>
 <div class="sign">
-  <div class="sign-box"><div class="line">Date: ${now}</div></div>
-  <div class="sign-box"><div class="line">${instructor}</div><div class="sub-label">(Instructor)</div></div>
+  <div class="sign-box"><div class="line">${dateStr}</div></div>
+  <div class="sign-box"><div class="line">${instrLabel}</div></div>
   <div class="sign-box"><div class="line">Group Instructor</div></div>
   <div class="sign-box"><div class="line">Principal</div></div>
 </div>
@@ -1139,9 +1253,15 @@ function printHalfYearReport(){
   if(!lastHRData||!lastHRMeta) return;
   const{batch,h1s,h1e,h2s,h2e}=lastHRMeta;
   const inst=S.profile?.institute||"Govt ITI Dhanuvachapuram";
-  const instructor=S.profile?.name||"";
+  // Use editable print details
+  const pd=S.printDetails;
+  const instructor=pd.name||S.profile?.name||"";
+  const posCode=pd.position||S.profile?.position||"SI";
+  const printTrade=pd.trade||S.profile?.trade||"";
+  const instrLabel=`${instructor} (${posCode}, ${printTrade})`;
   const bname=batch?batch.name:""; const trade=batch?batch.trade:""; const acYear=batch?batch.year:"";
   const now=new Date().toLocaleDateString("en-IN");
+  const dateStr=pd.printDate?`Date: ${now}`:"Date:";
   const rows=lastHRData.map((s,i)=>{
     const h1c=s.h1Pct<PCT_WARN?"low":s.h1Pct<PCT_WARN+5?"med":"ok";
     const h2c=s.h2Pct<PCT_WARN?"low":s.h2Pct<PCT_WARN+5?"med":"ok";
@@ -1180,7 +1300,7 @@ tr:nth-child(even) td{background:#f5f5f5}
   <h2>Trade: ${trade} &mdash; ${bname}</h2>
   <h3>Half-Year Attendance Summary &mdash; Academic Year: ${acYear}</h3>
   <hr>
-  <div class="sub">${instructor} (Instructor)</div>
+  <div class="sub">${instrLabel}</div>
   <div class="period">
     <span><strong>H1 (First Half):</strong> ${h1s} to ${h1e}</span>
     <span><strong>H2 (Second Half):</strong> ${h2s} to ${h2e}</span>
@@ -1193,8 +1313,8 @@ tr:nth-child(even) td{background:#f5f5f5}
   <th class="h2">Possible</th><th class="h2">Present</th><th class="h2">%</th></tr>
 </thead><tbody>${rows}</tbody></table>
 <div class="sign">
-  <div class="sign-box"><div class="line">Date: ${now}</div></div>
-  <div class="sign-box"><div class="line">${instructor}</div><div class="sub-label">(Instructor)</div></div>
+  <div class="sign-box"><div class="line">${dateStr}</div></div>
+  <div class="sign-box"><div class="line">${instrLabel}</div></div>
   <div class="sign-box"><div class="line">Group Instructor</div></div>
   <div class="sign-box"><div class="line">Principal</div></div>
 </div>
@@ -1215,7 +1335,9 @@ function bindPageEvents(){
   if(ms){ms.addEventListener("click",handleClick);}
   // Settings signout
   const so=document.getElementById("btn-signout");
-  if(so) so.addEventListener("click",()=>signOut(auth));
+  if(so) so.addEventListener("click",()=>{
+    if(confirm("Sign out? You will need to sign in again on this device.")) signOut(auth);
+  });
 }
 
 function handleChange(e){
@@ -1233,6 +1355,16 @@ function handleChange(e){
   else if(t.id==="hr-h1e"){S.hrState.h1e=t.value;}
   else if(t.id==="hr-h2s"){S.hrState.h2s=t.value;}
   else if(t.id==="hr-h2e"){S.hrState.h2e=t.value;}
+  // Print detail fields — monthly
+  else if(t.id==="pd-name"){S.printDetails.name=t.value;}
+  else if(t.id==="pd-pos"){S.printDetails.position=t.value;}
+  else if(t.id==="pd-trade"){S.printDetails.trade=t.value;}
+  else if(t.id==="pd-date"){S.printDetails.printDate=t.checked;}
+  // Print detail fields — halfyear
+  else if(t.id==="hr-pd-name"){S.printDetails.name=t.value;}
+  else if(t.id==="hr-pd-pos"){S.printDetails.position=t.value;}
+  else if(t.id==="hr-pd-trade"){S.printDetails.trade=t.value;}
+  else if(t.id==="hr-pd-date"){S.printDetails.printDate=t.checked;}
 }
 
 async function loadAttPageData(){
@@ -1366,6 +1498,11 @@ async function handleClick(e){
 
   // Reports
   if(a==="load-monthly"){
+    // Sync print details from inputs before generating
+    S.printDetails.name=(document.getElementById("pd-name")?.value||S.printDetails.name).trim();
+    S.printDetails.position=document.getElementById("pd-pos")?.value||S.printDetails.position;
+    S.printDetails.trade=(document.getElementById("pd-trade")?.value||S.printDetails.trade).trim();
+    S.printDetails.printDate=document.getElementById("pd-date")?.checked??S.printDetails.printDate;
     setLoading(true,"Generating report...");
     try{
       // Load all attendance docs at once for accurate cumulative totals
@@ -1397,6 +1534,11 @@ async function handleClick(e){
   if(a==="print-monthly"){printMonthlyReport();return;}
 
   if(a==="load-halfyear"){
+    // Sync print details from inputs before calculating
+    S.printDetails.name=(document.getElementById("hr-pd-name")?.value||S.printDetails.name).trim();
+    S.printDetails.position=document.getElementById("hr-pd-pos")?.value||S.printDetails.position;
+    S.printDetails.trade=(document.getElementById("hr-pd-trade")?.value||S.printDetails.trade).trim();
+    S.printDetails.printDate=document.getElementById("hr-pd-date")?.checked??S.printDetails.printDate;
     setLoading(true,"Calculating...");
     try{
       await loadAllAttendance();
@@ -1431,12 +1573,14 @@ async function handleClick(e){
   // Settings
   if(a==="edit-profile"){
     const p=S.profile||{};
+    const posOpts=POSITIONS.map(x=>`<option value="${x.val}"${p.position===x.val?" selected":""}>${x.label} (${x.val})</option>`).join("");
     showModal(`
 <div class="modal-header"><h3>Edit profile</h3><button class="btn-icon" onclick="closeModal()">✕</button></div>
 <div class="modal-body">
   <div class="form-group"><label class="form-label">Name</label><input id="ep-name" value="${p.name||""}"/></div>
   <div class="form-group"><label class="form-label">Institute</label><input id="ep-inst" value="${p.institute||""}"/></div>
   <div class="form-group"><label class="form-label">Trade</label><input id="ep-trade" value="${p.trade||""}"/></div>
+  <div class="form-group"><label class="form-label">Position</label><select id="ep-pos">${posOpts}</select></div>
 </div>
 <div class="modal-footer">
   <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -1445,13 +1589,16 @@ async function handleClick(e){
     return;
   }
   if(a==="save-profile"){
-    const nm=document.getElementById("ep-name").value.trim();
+    const nm=document.getElementById("ep-name").value.trim().toUpperCase();
     const inst=document.getElementById("ep-inst").value.trim();
-    const trade=document.getElementById("ep-trade").value.trim();
+    const trade=document.getElementById("ep-trade").value.trim().toUpperCase();
+    const pos=document.getElementById("ep-pos").value;
     if(!nm){toast("Name required","error");return;}
     setLoading(true);
     try{
-      await saveProfile({...S.profile,name:nm,institute:inst,trade});
+      await saveProfile({...S.profile,name:nm,institute:inst,trade,position:pos});
+      // sync printDetails
+      S.printDetails={...S.printDetails,name:nm,position:pos,trade};
       closeModal();refreshPage();toast("Profile updated");
     }catch(e){toast(e.message,"error");}
     finally{setLoading(false);}
@@ -1475,6 +1622,7 @@ async function handleClick(e){
 
 // make closeModal global for inline onclick
 window.closeModal = closeModal;
+window.switchTab = (tab) => renderLogin(tab);
 </script>
 </body>
 </html>
