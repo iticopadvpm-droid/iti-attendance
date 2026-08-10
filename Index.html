@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ITI Attendance System</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f4f6f9;--surface:#fff;--surface2:#f8f9fb;
+  --border:#e2e6ea;--border2:#cdd3da;
+  --text:#1a202c;--text2:#4a5568;--text3:#718096;
+  --accent:#2563eb;--accent-bg:#eff6ff;--accent-border:#bfdbfe;
+  --success:#16a34a;--success-bg:#f0fdf4;--success-border:#bbf7d0;
+  --warn:#d97706;--warn-bg:#fffbeb;--warn-border:#fde68a;
+  --danger:#dc2626;--danger-bg:#fef2f2;--danger-border:#fecaca;
+  --radius:8px;--radius2:12px;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+h1{font-size:20px;font-weight:600}h2{font-size:16px;font-weight:600}h3{font-size:14px;font-weight:600}
+button{cursor:pointer;font-family:inherit;font-size:13px;transition:all .15s}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select{font-family:inherit;font-size:13px;color:var(--text);background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:8px 10px;width:100%;outline:none;transition:border .15s}
+input:focus,select:focus{border-color:var(--accent)}
+.btn{padding:8px 16px;border-radius:var(--radius);border:none;font-weight:500}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#1d4ed8}
+.btn-secondary{background:var(--surface);border:1px solid var(--border2);color:var(--text2)}.btn-secondary:hover{background:var(--surface2)}
+.btn-danger{background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--danger)}
+.btn-success{background:var(--success-bg);border:1px solid var(--success-border);color:var(--success)}
+.btn-google{background:#fff;border:1px solid var(--border2);color:var(--text);display:flex;align-items:center;gap:10px;padding:10px 20px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;width:100%;justify-content:center}
+.btn-google:hover{background:var(--surface2);box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-icon{background:none;border:none;padding:4px 6px;border-radius:4px;color:var(--text3)}.btn-icon:hover{background:var(--surface2);color:var(--text)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius2);box-shadow:var(--shadow)}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.card-body{padding:16px 18px}
+.flex{display:flex;align-items:center;gap:8px}
+.flex-end{justify-content:flex-end}
+.flex-between{justify-content:space-between}
+.flex-wrap{flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}.mb20{margin-bottom:20px}
+.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}
+.p0{padding:0}
+.text-sm{font-size:12px}.text-xs{font-size:11px}
+.text-muted{color:var(--text3)}.text-secondary{color:var(--text2)}
+.text-danger{color:var(--danger)}.text-warn{color:var(--warn)}.text-success{color:var(--success)}.text-accent{color:var(--accent)}
+.fw500{font-weight:500}.fw600{font-weight:600}
+table{width:100%;border-collapse:collapse}
+th{background:var(--surface2);padding:9px 12px;text-align:left;font-size:12px;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface2)}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-accent{background:var(--accent-bg);color:var(--accent)}
+/* Layout */
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:210px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-logo{padding:14px 16px;border-bottom:1px solid var(--border)}
+.sidebar-logo .inst{font-size:11px;color:var(--text3);margin-top:1px;line-height:1.3}
+.sidebar-logo .user{font-size:12px;color:var(--accent);font-weight:500;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+nav{flex:1;padding:8px 6px;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:var(--radius);border:none;background:none;width:100%;text-align:left;font-size:13px;color:var(--text2);cursor:pointer;transition:all .15s}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:var(--accent-bg);color:var(--accent);font-weight:500}
+.nav-sep{height:1px;background:var(--border);margin:6px 4px}
+.sidebar-footer{padding:10px 8px;border-top:1px solid var(--border)}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{padding:10px 20px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.content{flex:1;overflow-y:auto;padding:20px}
+/* Stat cards */
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius2);padding:14px 16px}
+.stat-val{font-size:26px;font-weight:700;line-height:1.1}
+.stat-lbl{font-size:11px;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:.04em}
+/* Attendance */
+.att-table th,.att-table td{padding:7px 10px;border-bottom:1px solid var(--border);font-size:13px}
+.att-table th{font-size:11px;font-weight:600;color:var(--text2);background:var(--surface2)}
+.sess-group{display:flex;gap:3px;align-items:center}
+.sess-label{font-size:10px;color:var(--text3);font-weight:600;width:18px}
+.sess-btn{padding:4px 7px;border-radius:4px;border:1px solid var(--border2);font-size:11px;font-weight:600;background:var(--surface2);color:var(--text3);cursor:pointer;transition:all .1s;min-width:32px;text-align:center}
+.sess-btn.P{background:#dcfce7;color:#15803d;border-color:#86efac}
+.sess-btn.A{background:#fee2e2;color:#dc2626;border-color:#fca5a5}
+.sess-btn.CL{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
+.sess-btn.ML{background:#fef3c7;color:#b45309;border-color:#fcd34d}
+.att-footer{padding:10px 12px;background:var(--surface2);border-top:1px solid var(--border);display:flex;gap:20px;flex-wrap:wrap;font-size:12px}
+/* Login screen */
+.login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:linear-gradient(135deg,#eff6ff 0%,#f0fdf4 100%)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:36px 32px;width:100%;max-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.08);text-align:center}
+.login-logo{font-size:48px;margin-bottom:16px}
+/* PIN screen */
+.pin-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:var(--bg)}
+.pin-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;width:100%;max-width:380px;box-shadow:var(--shadow)}
+.pin-dots{display:flex;gap:12px;justify-content:center;margin:20px 0}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);background:transparent;transition:all .15s}
+.pin-dot.filled{background:var(--accent);border-color:var(--accent)}
+.pin-dot.error{background:var(--danger);border-color:var(--danger)}
+.pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:220px;margin:0 auto}
+.pin-key{padding:14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);font-size:18px;font-weight:500;cursor:pointer;text-align:center;transition:all .1s}
+.pin-key:hover{background:var(--accent-bg);border-color:var(--accent-border);color:var(--accent)}
+.pin-key:active{transform:scale(.95)}
+/* Profile setup */
+.setup-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:480px;box-shadow:var(--shadow)}
+/* Modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--surface);border-radius:16px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-header{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-body{padding:18px 20px}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px}
+/* Toast */
+.toast{position:fixed;bottom:24px;right:24px;z-index:400;padding:12px 18px;border-radius:var(--radius);font-size:13px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,.15);animation:slideUp .25s ease}
+.toast-success{background:#16a34a;color:#fff}
+.toast-error{background:#dc2626;color:#fff}
+.toast-info{background:#2563eb;color:#fff}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+/* Loading */
+.spinner{width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.75);z-index:300;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px}
+.loading-overlay p{font-size:13px;color:var(--text2)}
+/* Report */
+.report-table th,.report-table td{padding:6px 10px;font-size:12px;text-align:center}
+.report-table td:nth-child(3){text-align:left}
+.report-table th:nth-child(3){text-align:left}
+.report-title{padding:14px 18px;background:var(--surface2);border-bottom:1px solid var(--border)}
+.pct-critical{color:var(--danger);font-weight:600}
+.pct-warn{color:var(--warn);font-weight:600}
+.pct-ok{color:var(--success);font-weight:600}
+/* User avatar */
+.avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;border:2px solid var(--border)}
+.avatar-initials{width:32px;height:32px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid var(--accent-border)}
+/* Sync indicator */
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block}
+.sync-dot.syncing{background:var(--warn);animation:pulse 1s infinite}
+.sync-dot.error{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* Print */
+@media print{
+  body{background:#fff!important;font-size:12px}
+  .no-print{display:none!important}
+  .app{display:block;height:auto;overflow:visible}
+  .sidebar{display:none!important}
+  .main{display:block;overflow:visible}
+  .topbar{display:none!important}
+  .content{padding:0;overflow:visible}
+  .card{box-shadow:none!important;border:none!important}
+  .print-table{width:100%;border-collapse:collapse;font-size:11px}
+  .print-table th{background:#e0e0e0!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;border:1px solid #888;padding:5px 6px;font-size:10px;font-weight:700;text-align:center}
+  .print-table td{border:1px solid #bbb;padding:4px 6px;text-align:center}
+  .print-table td.name-col{text-align:left}
+  .print-table tr:nth-child(even) td{background:#f5f5f5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{margin:15mm 12mm;size:A4 portrait}
+}
+@media(max-width:640px){
+  .sidebar{width:52px}
+  .sidebar-logo .title,.sidebar-logo .inst,.sidebar-logo .user{display:none}
+  .nav-item span{display:none}.nav-item{justify-content:center}
+  .grid4{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div id="root"><div class="loading-overlay"><div class="spinner"></div><p>Loading...</p></div></div>
+<div id="modal-slot"></div>
+
+<!-- Firebase SDKs -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
+         collection, getDocs, writeBatch, query, where }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ============================================================
+// FIREBASE CONFIG
+// ============================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyBDp77-c1-W90NbN7JaHeON0lGdmw_a4rE",
+  authDomain: "iti-attandance.firebaseapp.com",
+  projectId: "iti-attandance",
+  storageBucket: "iti-attandance.firebasestorage.app",
+  messagingSenderId: "696177559857",
+  appId: "1:696177559857:web:97e6ab2fc4fb7c6cfac810",
+  measurementId: "G-HGLFQ6FT99"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const MONTHS = ["January","February","March","April","May","June",
+                "July","August","September","October","November","December"];
+const SESS = ["P","A","CL","ML"];
+const SESS_LABEL = { P:"Present", A:"Absent", CL:"Casual Leave", ML:"Medical Leave" };
+const PCT_WARN = 80;
+const TODAY = new Date();
+
+// ============================================================
+// STATE
+// ============================================================
+let S = {
+  user: null,           // Firebase user
+  profile: null,        // { name, institute, pinHash }
+  isUnlocked: false,
+  batches: [],
+  students: [],
+  attendance: {},       // { dateKey: { studentId: {fn,an} } }
+  page: "dashboard",
+  attState: { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate() },
+  studFilter: "all",
+  monthRep: { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth() },
+  hrState: { batchId:"", h1s:"", h1e:"", h2s:"", h2e:"" },
+  syncStatus: "ok",     // ok | syncing | error
+};
+
+let lastMonthlyData=null, lastMonthlyMeta=null;
+let lastHRData=null, lastHRMeta=null;
+
+// ============================================================
+// FIRESTORE HELPERS — data lives under /instructors/{uid}/...
+// ============================================================
+const userPath = () => `instructors/${S.user.uid}`;
+const profileRef   = () => doc(db, userPath(), "_meta", "config", "profile");
+const batchesRef   = () => collection(db, userPath(), "batches");
+const batchRef     = (id) => doc(db, userPath(), "batches", id);
+const studentsRef  = () => collection(db, userPath(), "students");
+const studentRef   = (id) => doc(db, userPath(), "students", id);
+const attRef       = (dk) => doc(db, userPath(), "attendance", dk);
+const attColRef    = () => collection(db, userPath(), "attendance");
+
+// ============================================================
+// PIN HASH (SHA-256)
+// ============================================================
+async function hashPin(pin) {
+  const raw = "ITI_ATT_" + pin + "_SALT_2025";
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+// ============================================================
+// FIRESTORE OPS
+// ============================================================
+async function saveProfile(data) {
+  const ref = doc(db, `instructors/${S.user.uid}/_meta/profile`);
+  await setDoc(ref, data);
+  S.profile = data;
+}
+
+async function loadProfile() {
+  const ref = doc(db, `instructors/${S.user.uid}/_meta/profile`);
+  const snap = await getDoc(ref);
+  return snap.exists() ? snap.data() : null;
+}
+
+async function loadBatches() {
+  const snap = await getDocs(batchesRef());
+  S.batches = snap.docs.map(d=>({id:d.id,...d.data()}));
+  S.batches.sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+async function saveBatchFS(batch) {
+  setSyncStatus("syncing");
+  await setDoc(batchRef(batch.id), batch);
+  setSyncStatus("ok");
+}
+
+async function deleteBatchFS(id) {
+  setSyncStatus("syncing");
+  await deleteDoc(batchRef(id));
+  // delete students in batch
+  const snap = await getDocs(query(studentsRef(), where("batchId","==",id)));
+  const batch2 = writeBatch(db);
+  snap.docs.forEach(d => batch2.delete(d.ref));
+  await batch2.commit();
+  setSyncStatus("ok");
+}
+
+async function loadStudents() {
+  const snap = await getDocs(studentsRef());
+  S.students = snap.docs.map(d=>({id:d.id,...d.data()}));
+  S.students.sort((a,b)=>a.name.localeCompare(b.name));
+}
+
+async function saveStudentFS(student) {
+  setSyncStatus("syncing");
+  await setDoc(studentRef(student.id), student);
+  setSyncStatus("ok");
+}
+
+async function deleteStudentFS(id) {
+  setSyncStatus("syncing");
+  await deleteDoc(studentRef(id));
+  setSyncStatus("ok");
+}
+
+async function loadAttendanceMonth(year, month) {
+  const from = `${year}-${pad(month+1)}-01`;
+  const to   = `${year}-${pad(month+1)}-${pad(daysInMonth(year,month))}`;
+  const snap = await getDocs(query(attColRef(), where("__name__",">=",from), where("__name__","<=",to)));
+  snap.docs.forEach(d => { S.attendance[d.id] = d.data(); });
+}
+
+async function saveAttendanceFS(dk, sid, fn, an) {
+  setSyncStatus("syncing");
+  try {
+    const ref = attRef(dk);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      await updateDoc(ref, { [sid]: {fn, an}, _updated: Date.now() });
+    } else {
+      await setDoc(ref, { [sid]: {fn, an}, _updated: Date.now() });
+    }
+    setSyncStatus("ok");
+  } catch(e) { setSyncStatus("error"); throw e; }
+}
+
+async function markAllFS(dk, studentIds, fn, an) {
+  setSyncStatus("syncing");
+  try {
+    const ref = attRef(dk);
+    const updates = { _updated: Date.now() };
+    studentIds.forEach(sid => updates[sid] = {fn, an});
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      await updateDoc(ref, updates);
+    } else {
+      await setDoc(ref, updates);
+    }
+    setSyncStatus("ok");
+  } catch(e) { setSyncStatus("error"); throw e; }
+}
+
+// ============================================================
+// REPORT CALCULATIONS (client-side from cached S.attendance)
+// ============================================================
+function calcMonthlyReport(batchId, year, month) {
+  const students = S.students.filter(s=>s.batchId===batchId);
+  const firstDay = `${year}-${pad(month+1)}-01`;
+  const lastDay  = `${year}-${pad(month+1)}-${pad(daysInMonth(year,month))}`;
+
+  return students.map(s => {
+    let mPoss=0,mPres=0,cumPoss=0,cumPres=0;
+    for (const [dk,rec] of Object.entries(S.attendance)) {
+      if (!rec[s.id]) continue;
+      const r = rec[s.id];
+      if (!r.fn && !r.an) continue;
+      const poss = (r.fn?0.5:0)+(r.an?0.5:0);
+      const pres = (r.fn==="P"?0.5:0)+(r.an==="P"?0.5:0);
+      if (dk >= firstDay && dk <= lastDay) { mPoss+=poss; mPres+=pres; }
+      if (dk <= lastDay) { cumPoss+=poss; cumPres+=pres; }
+    }
+    return {
+      id:s.id, adm:s.adm, name:s.name,
+      monthPoss:mPoss, monthPres:mPres,
+      cumPoss, cumPres,
+      pct: cumPoss>0 ? Math.round(cumPres/cumPoss*100) : 0
+    };
+  });
+}
+
+async function loadAttendanceRange(from, to) {
+  // Load attendance for a date range (for H1/H2)
+  const snap = await getDocs(query(attColRef(),
+    where("__name__",">=",from), where("__name__","<=",to)));
+  snap.docs.forEach(d => { S.attendance[d.id] = d.data(); });
+}
+
+function calcHalfYearReport(batchId, h1s, h1e, h2s, h2e) {
+  const students = S.students.filter(s=>s.batchId===batchId);
+  return students.map(s => {
+    let h1Poss=0,h1Pres=0,h2Poss=0,h2Pres=0;
+    for (const [dk,rec] of Object.entries(S.attendance)) {
+      if (!rec[s.id]) continue;
+      const r = rec[s.id];
+      if (!r.fn && !r.an) continue;
+      const poss = (r.fn?0.5:0)+(r.an?0.5:0);
+      const pres = (r.fn==="P"?0.5:0)+(r.an==="P"?0.5:0);
+      if (dk>=h1s&&dk<=h1e){ h1Poss+=poss; h1Pres+=pres; }
+      if (dk>=h2s&&dk<=h2e){ h2Poss+=poss; h2Pres+=pres; }
+    }
+    return {
+      id:s.id, adm:s.adm, name:s.name,
+      h1Poss,h1Pres, h1Pct:h1Poss>0?Math.round(h1Pres/h1Poss*100):0,
+      h2Poss,h2Pres, h2Pct:h2Poss>0?Math.round(h2Pres/h2Poss*100):0
+    };
+  });
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function uid(){ return crypto.randomUUID().replace(/-/g,"").substring(0,12); }
+function pad(n){ return String(n).padStart(2,"0"); }
+function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+function fmtDate(d){ const dt=d instanceof Date?d:new Date(d); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`; }
+function setSyncStatus(s){ S.syncStatus=s; const el=document.getElementById("sync-dot"); if(el){el.className="sync-dot"+(s!=="ok"?" "+s:"");el.title=s==="ok"?"Saved":s==="syncing"?"Saving...":"Save error";} }
+
+function toast(msg,type="success"){
+  const el=document.createElement("div");
+  el.className=`toast toast-${type}`;
+  el.textContent=msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+function setLoading(v,msg=""){
+  let ov=document.getElementById("loading-overlay");
+  if(v&&!ov){
+    ov=document.createElement("div");
+    ov.id="loading-overlay";
+    ov.className="loading-overlay";
+    ov.innerHTML=`<div class="spinner"></div>${msg?`<p>${msg}</p>`:""}`;
+    document.body.appendChild(ov);
+  }else if(!v&&ov){ ov.remove(); }
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+function showModal(html){
+  document.getElementById("modal-slot").innerHTML=
+    `<div class="modal-backdrop" id="modal-backdrop"><div class="modal">${html}</div></div>`;
+  document.getElementById("modal-backdrop").addEventListener("click",e=>{
+    if(e.target.id==="modal-backdrop")closeModal();
+  });
+}
+function closeModal(){ document.getElementById("modal-slot").innerHTML=""; }
+
+// ============================================================
+// AUTH STATE
+// ============================================================
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    S.user = user;
+    setLoading(true,"Loading your data...");
+    try {
+      S.profile = await loadProfile();
+      if (!S.profile) {
+        // First time — show profile setup
+        setLoading(false);
+        renderProfileSetup();
+        return;
+      }
+      // Has profile — show PIN screen
+      setLoading(false);
+      renderPin("");
+    } catch(e) {
+      setLoading(false);
+      toast("Error loading profile: "+e.message,"error");
+      renderLogin();
+    }
+  } else {
+    S.user = null;
+    S.profile = null;
+    S.isUnlocked = false;
+    renderLogin();
+  }
+});
+
+// ============================================================
+// RENDER ROOT
+// ============================================================
+function renderRoot(){
+  if (!S.user)       { renderLogin(); return; }
+  if (!S.profile)    { renderProfileSetup(); return; }
+  if (!S.isUnlocked) { renderPin(""); return; }
+  renderApp();
+}
+
+// ============================================================
+// LOGIN SCREEN
+// ============================================================
+function renderLogin(){
+  document.getElementById("root").innerHTML=`
+<div class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">🏫</div>
+    <h1 style="font-size:22px;margin-bottom:6px">ITI Attendance</h1>
+    <p class="text-sm text-muted mb20">Govt ITI Dhanuvachapuram</p>
+    <p class="text-secondary mb20" style="font-size:13px;line-height:1.6">
+      Sign in with your Google account.<br>Your data is private and secure.
+    </p>
+    <button class="btn-google" id="btn-google-signin">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      Sign in with Google
+    </button>
+    <p id="login-err" class="text-sm text-danger mt8" style="display:none"></p>
+  </div>
+</div>`;
+  document.getElementById("btn-google-signin").addEventListener("click", async()=>{
+    const errEl = document.getElementById("login-err");
+    errEl.style.display="none";
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch(e) {
+      errEl.textContent = e.code==="auth/popup-closed-by-user" ? "Sign-in cancelled." : "Sign-in failed: "+e.message;
+      errEl.style.display="block";
+    }
+  });
+}
+
+// ============================================================
+// PROFILE SETUP (first time only)
+// ============================================================
+function renderProfileSetup(){
+  const u = S.user;
+  document.getElementById("root").innerHTML=`
+<div class="pin-screen">
+  <div class="setup-card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+      ${u.photoURL?`<img src="${u.photoURL}" class="avatar" style="width:44px;height:44px">`:`<div class="avatar-initials" style="width:44px;height:44px;font-size:16px">${u.displayName?u.displayName[0]:"U"}</div>`}
+      <div>
+        <div class="fw500">${u.displayName||"Instructor"}</div>
+        <div class="text-sm text-muted">${u.email}</div>
+      </div>
+    </div>
+    <h2 class="mb16">Set up your profile</h2>
+    <div class="form-group">
+      <label class="form-label">Your name (as instructor)</label>
+      <input id="p-name" value="${u.displayName||""}" placeholder="Full name"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Institute name</label>
+      <input id="p-inst" value="Govt ITI Dhanuvachapuram" placeholder="Institute name"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Trade / Department</label>
+      <input id="p-trade" placeholder="e.g. COPA, Electrician"/>
+    </div>
+    <div class="grid2" style="gap:8px">
+      <div class="form-group">
+        <label class="form-label">Set 4-digit PIN</label>
+        <input id="p-pin" type="password" maxlength="4" inputmode="numeric" placeholder="e.g. 1234"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm PIN</label>
+        <input id="p-pin2" type="password" maxlength="4" inputmode="numeric" placeholder="repeat"/>
+      </div>
+    </div>
+    <p class="text-xs text-muted mb16">PIN protects attendance marking. Anyone with the PIN can mark attendance on your behalf.</p>
+    <button class="btn btn-primary" id="btn-save-profile" style="width:100%">Save &amp; Continue</button>
+    <p id="p-err" class="text-sm text-danger mt8" style="display:none"></p>
+    <button class="btn btn-secondary btn-sm" id="btn-signout-setup" style="width:100%;margin-top:8px">Sign out</button>
+  </div>
+</div>`;
+  document.getElementById("btn-save-profile").addEventListener("click", async()=>{
+    const name  = document.getElementById("p-name").value.trim();
+    const inst  = document.getElementById("p-inst").value.trim();
+    const trade = document.getElementById("p-trade").value.trim();
+    const pin   = document.getElementById("p-pin").value.trim();
+    const pin2  = document.getElementById("p-pin2").value.trim();
+    const errEl = document.getElementById("p-err");
+    errEl.style.display="none";
+    if(!name){ errEl.textContent="Enter your name"; errEl.style.display="block"; return; }
+    if(!/^\d{4}$/.test(pin)){ errEl.textContent="PIN must be exactly 4 digits"; errEl.style.display="block"; return; }
+    if(pin!==pin2){ errEl.textContent="PINs do not match"; errEl.style.display="block"; return; }
+    setLoading(true,"Saving profile...");
+    try {
+      const pinHash = await hashPin(pin);
+      await saveProfile({ name, institute:inst, trade, pinHash, email:S.user.email, created:Date.now() });
+      // Auto-unlock after setup
+      S.isUnlocked = true;
+      await loadAll();
+      renderApp();
+    } catch(e){ errEl.textContent="Error: "+e.message; errEl.style.display="block"; }
+    finally{ setLoading(false); }
+  });
+  document.getElementById("btn-signout-setup").addEventListener("click",()=>signOut(auth));
+}
+
+// ============================================================
+// PIN SCREEN
+// ============================================================
+let pinBuffer="", pinError=false;
+
+function renderPin(errorMsg){
+  const p = S.profile||{};
+  const u = S.user;
+  document.getElementById("root").innerHTML=`
+<div class="pin-screen">
+  <div class="pin-card">
+    <div style="text-align:center;margin-bottom:4px">
+      ${u&&u.photoURL?`<img src="${u.photoURL}" class="avatar" style="width:52px;height:52px;margin:0 auto 10px;display:block">`:`<div style="font-size:36px;margin-bottom:10px">🔐</div>`}
+      <h2>${p.name||"ITI Attendance"}</h2>
+      <p class="text-sm text-muted">${p.institute||"Govt ITI Dhanuvachapuram"}</p>
+      <p class="text-xs text-muted">${u?u.email:""}</p>
+    </div>
+    <p class="text-sm text-secondary" style="text-align:center;margin:14px 0 4px">Enter 4-digit PIN</p>
+    <div class="pin-dots" id="pin-dots">
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    ${errorMsg?`<p class="text-sm text-danger" style="text-align:center;margin-bottom:8px">${errorMsg}</p>`:""}
+    <div class="pin-keypad">
+      ${[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map(k=>
+        k===""?`<div></div>`:`<button class="pin-key" data-key="${k}">${k}</button>`
+      ).join("")}
+    </div>
+    <button class="btn btn-secondary btn-sm" id="btn-signout-pin" style="width:100%;margin-top:16px;font-size:12px">Sign out</button>
+  </div>
+</div>`;
+  pinBuffer=""; pinError=false;
+  document.querySelectorAll(".pin-key").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const k=btn.dataset.key;
+      if(k==="⌫") pinBuffer=pinBuffer.slice(0,-1);
+      else if(pinBuffer.length<4) pinBuffer+=k;
+      updatePinDots();
+      if(pinBuffer.length===4) submitPin();
+    });
+  });
+  document.getElementById("btn-signout-pin").addEventListener("click",()=>signOut(auth));
+  document.onkeydown=e=>{
+    if(/^\d$/.test(e.key)&&pinBuffer.length<4){pinBuffer+=e.key;updatePinDots();if(pinBuffer.length===4)submitPin();}
+    if(e.key==="Backspace"){pinBuffer=pinBuffer.slice(0,-1);updatePinDots();}
+  };
+}
+
+function updatePinDots(){
+  document.querySelectorAll(".pin-dot").forEach((d,i)=>{
+    d.classList.toggle("filled",i<pinBuffer.length);
+    d.classList.toggle("error",pinError);
+  });
+}
+
+async function submitPin(){
+  const attempt=pinBuffer;
+  const hash=await hashPin(attempt);
+  if(hash===S.profile.pinHash){
+    document.onkeydown=null;
+    S.isUnlocked=true;
+    setLoading(true,"Loading attendance data...");
+    try{
+      await loadAll();
+      renderApp();
+    }catch(e){ toast("Load error: "+e.message,"error"); }
+    finally{ setLoading(false); }
+  } else {
+    pinError=true;
+    updatePinDots();
+    setTimeout(()=>{
+      pinBuffer=""; pinError=false;
+      renderPin("Incorrect PIN. Try again.");
+    },700);
+  }
+}
+
+// ============================================================
+// LOAD ALL DATA
+// ============================================================
+async function loadAll(){
+  await Promise.all([loadBatches(), loadStudents()]);
+  // Load this month's attendance
+  await loadAttendanceMonth(S.attState.year, S.attState.month);
+  // Set defaults
+  if(!S.attState.batchId&&S.batches.length) S.attState.batchId=S.batches[0].id;
+  if(!S.monthRep.batchId&&S.batches.length) S.monthRep.batchId=S.batches[0].id;
+  if(!S.hrState.batchId&&S.batches.length)  S.hrState.batchId=S.batches[0].id;
+  const y=TODAY.getFullYear();
+  if(!S.hrState.h1s){S.hrState.h1s=`${y}-06-01`;S.hrState.h1e=`${y}-11-30`;S.hrState.h2s=`${y}-12-01`;S.hrState.h2e=`${y+1}-05-31`;}
+}
+
+// ============================================================
+// MAIN APP
+// ============================================================
+const NAV=[
+  {id:"dashboard", label:"Dashboard",      icon:"📊"},
+  {id:"batches",   label:"Batches",         icon:"🗂️"},
+  {id:"students",  label:"Students",        icon:"👥"},
+  {sep:true},
+  {id:"attendance",label:"Mark Attendance", icon:"✅"},
+  {sep:true},
+  {id:"monthly",   label:"Monthly Report",  icon:"📋"},
+  {id:"halfyear",  label:"H1 / H2 Report",  icon:"📈"},
+  {sep:true},
+  {id:"settings",  label:"Settings",        icon:"⚙️"},
+];
+
+function renderApp(){
+  document.onkeydown=null;
+  const u=S.user; const p=S.profile||{};
+  const navItems=NAV.map(n=>{
+    if(n.sep) return`<div class="nav-sep"></div>`;
+    return`<button class="nav-item ${S.page===n.id?"active":""}" data-page="${n.id}">
+      <span>${n.icon}</span><span>${n.label}</span>
+    </button>`;
+  }).join("");
+  const today=TODAY.toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+  document.getElementById("root").innerHTML=`
+<div class="app">
+  <div class="sidebar">
+    <div class="sidebar-logo">
+      <div class="flex" style="gap:8px">
+        ${u&&u.photoURL?`<img src="${u.photoURL}" class="avatar">`:`<div class="avatar-initials">${p.name?p.name[0]:"I"}</div>`}
+        <div style="overflow:hidden">
+          <div class="title fw600" style="font-size:13px">ITI Attendance</div>
+          <div class="inst">${p.institute||"Govt ITI"}</div>
+          <div class="user">${p.name||""}</div>
+        </div>
+      </div>
+    </div>
+    <nav>${navItems}</nav>
+    <div class="sidebar-footer">
+      <div class="flex" style="gap:6px;margin-bottom:6px">
+        <span class="sync-dot" id="sync-dot" title="Saved"></span>
+        <span class="text-xs text-muted" id="sync-label">Saved</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="btn-lock" style="width:100%">🔒 Lock</button>
+    </div>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <h2 id="page-title">${NAV.find(n=>n.id===S.page)?.label||""}</h2>
+      <div class="flex" style="gap:10px">
+        <span class="text-sm text-muted">${today}</span>
+        <span class="badge badge-accent">${p.name||""}</span>
+      </div>
+    </div>
+    <div class="content" id="page-content">${renderPage()}</div>
+  </div>
+</div>`;
+  bindApp();
+}
+
+function bindApp(){
+  document.querySelectorAll(".nav-item[data-page]").forEach(b=>{
+    b.addEventListener("click",()=>{
+      const pg=b.dataset.page;
+      S.page=pg;
+      if(pg==="attendance") loadAttPageData();
+      else if(pg==="students") loadStudentsPageData();
+      else refreshPage();
+    });
+  });
+  document.getElementById("btn-lock").addEventListener("click",()=>{
+    S.isUnlocked=false;
+    document.onkeydown=null;
+    renderPin("");
+  });
+  bindPageEvents();
+}
+
+function refreshPage(){
+  document.querySelectorAll(".nav-item[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===S.page));
+  document.getElementById("page-title").textContent=NAV.find(n=>n.id===S.page)?.label||"";
+  document.getElementById("page-content").innerHTML=renderPage();
+  bindPageEvents();
+}
+
+function renderPage(){
+  switch(S.page){
+    case"dashboard": return renderDashboard();
+    case"batches":   return renderBatches();
+    case"students":  return renderStudents();
+    case"attendance":return renderAttendance();
+    case"monthly":   return renderMonthly();
+    case"halfyear":  return renderHalfYear();
+    case"settings":  return renderSettings();
+    default: return "";
+  }
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function renderDashboard(){
+  const totalSt=S.students.length, totalB=S.batches.length;
+  const dk=fmtDate(TODAY);
+  const todayAtt=S.attendance[dk]||{};
+  const markedToday=Object.keys(todayAtt).filter(k=>k!=="__updated"&&k!=="__name__"&&k!=="_updated").length;
+  let below80=0;
+  for(const s of S.students){
+    let poss=0,pres=0;
+    for(const rec of Object.values(S.attendance)){
+      if(!rec[s.id])continue;
+      const r=rec[s.id];
+      if(r.fn)poss+=0.5; if(r.an)poss+=0.5;
+      if(r.fn==="P")pres+=0.5; if(r.an==="P")pres+=0.5;
+    }
+    if(poss>0&&Math.round(pres/poss*100)<PCT_WARN)below80++;
+  }
+  const batchRows=S.batches.map(b=>{
+    const cnt=S.students.filter(s=>s.batchId===b.id).length;
+    return`<tr><td class="fw500">${b.name}</td><td>${b.trade}</td><td>${b.year}</td><td>${cnt}</td></tr>`;
+  }).join("")||`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">No batches yet</td></tr>`;
+  return`
+<div class="grid4 mb20">
+  <div class="stat-card"><div class="stat-val text-accent">${totalB}</div><div class="stat-lbl">Batches</div></div>
+  <div class="stat-card"><div class="stat-val">${totalSt}</div><div class="stat-lbl">Students</div></div>
+  <div class="stat-card"><div class="stat-val text-success">${markedToday}</div><div class="stat-lbl">Marked today</div></div>
+  <div class="stat-card"><div class="stat-val text-danger">${below80}</div><div class="stat-lbl">Below ${PCT_WARN}%</div></div>
+</div>
+<div class="card mb16">
+  <div class="card-header flex-between"><h3>Batches</h3><button class="btn btn-secondary btn-sm" data-action="go-batches">Manage</button></div>
+  <div class="p0"><table>${batchRows}</table></div>
+</div>
+<div class="card">
+  <div class="card-header"><h3>Quick actions</h3></div>
+  <div class="card-body flex flex-wrap" style="gap:8px">
+    <button class="btn btn-primary" data-action="go-attendance">✅ Mark attendance</button>
+    <button class="btn btn-secondary" data-action="go-students">👥 Add students</button>
+    <button class="btn btn-secondary" data-action="go-monthly">📋 Monthly report</button>
+    <button class="btn btn-secondary" data-action="go-halfyear">📈 H1/H2 report</button>
+  </div>
+</div>`;
+}
+
+// ============================================================
+// BATCHES
+// ============================================================
+function renderBatches(){
+  const rows=S.batches.map(b=>{
+    const cnt=S.students.filter(s=>s.batchId===b.id).length;
+    return`<tr><td class="fw500">${b.name}</td><td>${b.trade}</td><td>${b.year}</td><td>${cnt}</td>
+    <td><button class="btn-icon" data-action="edit-batch" data-id="${b.id}">✏️</button>
+    <button class="btn-icon" data-action="del-batch" data-id="${b.id}">🗑️</button></td></tr>`;
+  }).join("")||`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">No batches. Create one first.</td></tr>`;
+  return`
+<div class="flex flex-end mb16"><button class="btn btn-primary" data-action="add-batch">+ New batch</button></div>
+<div class="card p0"><table>
+  <thead><tr><th>Batch name</th><th>Trade</th><th>Year</th><th>Students</th><th>Actions</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table></div>`;
+}
+
+// ============================================================
+// STUDENTS
+// ============================================================
+function renderStudents(){
+  const bOpts=S.batches.map(b=>`<option value="${b.id}"${S.studFilter===b.id?" selected":""}>${b.name}</option>`).join("");
+  const filt=S.studFilter==="all"?S.students:S.students.filter(s=>s.batchId===S.studFilter);
+  const rows=filt.map(s=>{
+    const b=S.batches.find(x=>x.id===s.batchId);
+    return`<tr><td>${s.adm}</td><td class="fw500">${s.name}</td><td>${b?b.name:"-"}</td>
+    <td><button class="btn-icon" data-action="edit-student" data-id="${s.id}">✏️</button>
+    <button class="btn-icon" data-action="del-student" data-id="${s.id}">🗑️</button></td></tr>`;
+  }).join("")||`<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">No students found.</td></tr>`;
+  return`
+<div class="flex flex-between mb16">
+  <select style="width:220px" id="batch-filter"><option value="all">All batches</option>${bOpts}</select>
+  <button class="btn btn-primary" data-action="add-student">+ Add student</button>
+</div>
+<div class="card p0"><table>
+  <thead><tr><th>Adm No</th><th>Name</th><th>Batch</th><th>Actions</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table></div>`;
+}
+
+// ============================================================
+// ATTENDANCE
+// ============================================================
+function renderAttendance(){
+  const{batchId,year,month,day}=S.attState;
+  const maxDay=daysInMonth(year,month);
+  const d=Math.min(day,maxDay);
+  const dk=`${year}-${pad(month+1)}-${pad(d)}`;
+  const students=S.students.filter(s=>s.batchId===batchId);
+  const bOpts=S.batches.map(b=>`<option value="${b.id}"${batchId===b.id?" selected":""}>${b.name}</option>`).join("");
+  const mOpts=MONTHS.map((m,i)=>`<option value="${i}"${month===i?" selected":""}>${m}</option>`).join("");
+  const dOpts=Array.from({length:maxDay},(_,i)=>`<option value="${i+1}"${d===i+1?" selected":""}>${i+1}</option>`).join("");
+  let fnP=0,anP=0,full=0;
+  const rows=students.map((s,idx)=>{
+    const att=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
+    if(att.fn==="P")fnP++; if(att.an==="P")anP++; if(att.fn==="P"&&att.an==="P")full++;
+    const fnBtns=SESS.map(v=>`<button class="sess-btn ${att.fn===v?v:""}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="fn" data-val="${v}">${v}</button>`).join("");
+    const anBtns=SESS.map(v=>`<button class="sess-btn ${att.an===v?v:""}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="an" data-val="${v}">${v}</button>`).join("");
+    return`<tr>
+      <td style="color:var(--text3);font-size:12px">${idx+1}</td>
+      <td style="font-size:12px;color:var(--text3)">${s.adm}</td>
+      <td class="fw500">${s.name}</td>
+      <td><div class="sess-group"><span class="sess-label">FN</span>${fnBtns}</div></td>
+      <td><div class="sess-group"><span class="sess-label">AN</span>${anBtns}</div></td>
+      <td><button class="btn btn-secondary btn-sm" data-action="mark-both" data-sid="${s.id}" data-dk="${dk}" data-fn="${att.fn}" data-an="${att.an}">Both</button></td>
+    </tr>`;
+  }).join("");
+  return`
+<div class="card mb16">
+  <div class="card-body">
+    <div class="flex flex-wrap" style="gap:10px;align-items:flex-end">
+      <div><label class="form-label">Batch</label><select style="width:200px" id="att-batch">${bOpts}</select></div>
+      <div><label class="form-label">Month</label><select style="width:130px" id="att-month">${mOpts}</select></div>
+      <div><label class="form-label">Day</label><select style="width:75px" id="att-day">${dOpts}</select></div>
+      <div><label class="form-label">Year</label><input type="number" id="att-year" value="${year}" style="width:85px"/></div>
+      <div class="flex" style="gap:6px;margin-top:18px">
+        <button class="btn btn-success btn-sm" data-action="mark-all-present">All Present</button>
+        <button class="btn btn-danger btn-sm" data-action="mark-all-absent">All Absent</button>
+      </div>
+    </div>
+  </div>
+</div>
+${students.length?`
+<div class="card p0">
+  <div style="overflow-x:auto">
+  <table class="att-table">
+    <thead><tr><th>#</th><th>Adm</th><th>Name</th><th>Forenoon (FN)</th><th>Afternoon (AN)</th><th>Both</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>
+  <div class="att-footer">
+    <span>FN Present: <strong>${fnP}</strong></span>
+    <span>AN Present: <strong>${anP}</strong></span>
+    <span>Full day: <strong>${full}</strong></span>
+    <span style="color:var(--danger)">FN Absent: <strong>${students.length-fnP}</strong></span>
+    <span style="color:var(--danger)">AN Absent: <strong>${students.length-anP}</strong></span>
+    <span class="text-muted" style="margin-left:auto;font-size:11px">${dk}</span>
+  </div>
+</div>`:`<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No students in this batch. <button class="btn-icon text-accent" data-action="go-students">Add students →</button></div>`}`;
+}
+
+// ============================================================
+// MONTHLY REPORT
+// ============================================================
+function renderMonthly(){
+  const{batchId,year,month}=S.monthRep;
+  const bOpts=S.batches.map(b=>`<option value="${b.id}"${batchId===b.id?" selected":""}>${b.name}</option>`).join("");
+  const mOpts=MONTHS.map((m,i)=>`<option value="${i}"${month===i?" selected":""}>${m}</option>`).join("");
+  return`
+<div class="card mb16">
+  <div class="card-body">
+    <div class="flex flex-wrap" style="gap:10px;align-items:flex-end">
+      <div><label class="form-label">Batch</label><select style="width:210px" id="rep-batch">${bOpts}</select></div>
+      <div><label class="form-label">Month</label><select style="width:130px" id="rep-month">${mOpts}</select></div>
+      <div><label class="form-label">Year</label><input type="number" id="rep-year" value="${year}" style="width:85px"/></div>
+      <button class="btn btn-primary" style="margin-top:18px" data-action="load-monthly">Generate</button>
+      <button class="btn btn-secondary no-print" style="margin-top:18px" data-action="print-monthly" id="btn-print-monthly" disabled>🖨️ Print</button>
+    </div>
+  </div>
+</div>
+<div class="card p0" id="monthly-result">
+  <div style="text-align:center;padding:30px;color:var(--text3)">Select options and click Generate.</div>
+</div>`;
+}
+
+// ============================================================
+// H1/H2 REPORT
+// ============================================================
+function renderHalfYear(){
+  const{batchId,h1s,h1e,h2s,h2e}=S.hrState;
+  const bOpts=S.batches.map(b=>`<option value="${b.id}"${batchId===b.id?" selected":""}>${b.name}</option>`).join("");
+  return`
+<div class="card mb16">
+  <div class="card-body">
+    <div class="form-group"><label class="form-label">Batch</label><select style="width:220px" id="hr-batch">${bOpts}</select></div>
+    <div class="grid2 mt12" style="gap:12px">
+      <div style="border:1px solid var(--accent-border);border-radius:var(--radius2);padding:14px;background:var(--accent-bg)">
+        <div class="fw500 text-accent mb8">H1 — First half</div>
+        <div class="grid2" style="gap:8px">
+          <div><label class="form-label">From</label><input type="date" id="hr-h1s" value="${h1s}"/></div>
+          <div><label class="form-label">To</label><input type="date" id="hr-h1e" value="${h1e}"/></div>
+        </div>
+      </div>
+      <div style="border:1px solid var(--success-border);border-radius:var(--radius2);padding:14px;background:var(--success-bg)">
+        <div class="fw500 text-success mb8">H2 — Second half</div>
+        <div class="grid2" style="gap:8px">
+          <div><label class="form-label">From</label><input type="date" id="hr-h2s" value="${h2s}"/></div>
+          <div><label class="form-label">To</label><input type="date" id="hr-h2e" value="${h2e}"/></div>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-end mt12" style="gap:8px">
+      <button class="btn btn-primary" data-action="load-halfyear">Calculate</button>
+      <button class="btn btn-secondary" data-action="print-halfyear" id="btn-print-halfyear" disabled>🖨️ Print</button>
+    </div>
+  </div>
+</div>
+<div class="card p0" id="hr-result">
+  <div style="text-align:center;padding:30px;color:var(--text3)">Set periods and click Calculate.</div>
+</div>`;
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+function renderSettings(){
+  const p=S.profile||{}; const u=S.user||{};
+  return`
+<div class="card mb16">
+  <div class="card-header"><h3>Profile</h3></div>
+  <div class="card-body">
+    <div class="flex mb16" style="gap:12px">
+      ${u.photoURL?`<img src="${u.photoURL}" class="avatar" style="width:48px;height:48px">`:`<div class="avatar-initials" style="width:48px;height:48px;font-size:18px">${p.name?p.name[0]:"I"}</div>`}
+      <div>
+        <div class="fw500">${p.name||""}</div>
+        <div class="text-sm text-muted">${u.email||""}</div>
+        <div class="text-sm text-muted">${p.institute||""} &mdash; ${p.trade||""}</div>
+      </div>
+    </div>
+    <button class="btn btn-secondary btn-sm" data-action="edit-profile">Edit profile</button>
+  </div>
+</div>
+<div class="card mb16">
+  <div class="card-header"><h3>Change PIN</h3></div>
+  <div class="card-body">
+    <div class="grid2" style="gap:8px;max-width:320px">
+      <div><label class="form-label">New PIN</label><input type="password" id="new-pin" maxlength="4" inputmode="numeric" placeholder="4 digits"/></div>
+      <div><label class="form-label">Confirm PIN</label><input type="password" id="new-pin2" maxlength="4" inputmode="numeric" placeholder="repeat"/></div>
+    </div>
+    <button class="btn btn-primary btn-sm mt12" data-action="change-pin">Update PIN</button>
+  </div>
+</div>
+<div class="card">
+  <div class="card-header"><h3>Account</h3></div>
+  <div class="card-body">
+    <button class="btn btn-secondary" id="btn-signout">Sign out</button>
+  </div>
+</div>`;
+}
+
+// ============================================================
+// MODALS
+// ============================================================
+function batchModal(id){
+  const b=S.batches.find(x=>x.id===id)||{};
+  showModal(`
+<div class="modal-header"><h3>${id?"Edit batch":"New batch"}</h3><button class="btn-icon" onclick="closeModal()">✕</button></div>
+<div class="modal-body">
+  <div class="form-group"><label class="form-label">Batch name</label><input id="m-bname" value="${b.name||""}" placeholder="e.g. COPA - B Batch"/></div>
+  <div class="form-group"><label class="form-label">Trade</label><input id="m-btrade" value="${b.trade||""}" placeholder="e.g. COPA, Electrician"/></div>
+  <div class="form-group"><label class="form-label">Academic year</label><input id="m-byear" value="${b.year||""}" placeholder="e.g. 2025-2026"/></div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+  <button class="btn btn-primary" data-action="save-batch" data-id="${id||""}">Save</button>
+</div>`);
+}
+
+function studentModal(id){
+  const s=S.students.find(x=>x.id===id)||{};
+  const bOpts=S.batches.map(b=>`<option value="${b.id}"${s.batchId===b.id?" selected":""}>${b.name}</option>`).join("");
+  showModal(`
+<div class="modal-header"><h3>${id?"Edit student":"Add student"}</h3><button class="btn-icon" onclick="closeModal()">✕</button></div>
+<div class="modal-body">
+  <div class="form-group"><label class="form-label">Admission number</label><input id="m-sadm" value="${s.adm||""}" placeholder="e.g. 593"/></div>
+  <div class="form-group"><label class="form-label">Student name</label><input id="m-sname" value="${s.name||""}" placeholder="Full name in CAPITALS"/></div>
+  <div class="form-group"><label class="form-label">Batch</label><select id="m-sbatch"><option value="">Select batch...</option>${bOpts}</select></div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+  <button class="btn btn-primary" data-action="save-student" data-id="${id||""}">Save</button>
+</div>`);
+}
+
+function bothModal(sid,dk,fn,an){
+  showModal(`
+<div class="modal-header"><h3>Mark both sessions</h3><button class="btn-icon" onclick="closeModal()">✕</button></div>
+<div class="modal-body">
+  <p class="text-sm text-muted mb16">Apply same status to both FN and AN.</p>
+  <div class="grid2" style="gap:8px">
+    ${SESS.map(v=>`<button class="btn btn-secondary" style="padding:16px;font-size:15px;font-weight:600" data-action="mark-both-val" data-sid="${sid}" data-dk="${dk}" data-val="${v}">
+      ${v}<span style="font-size:11px;font-weight:400;display:block;color:var(--text3)">${SESS_LABEL[v]}</span>
+    </button>`).join("")}
+  </div>
+</div>`);
+}
+
+// ============================================================
+// PRINT — MONTHLY
+// ============================================================
+function printMonthlyReport(){
+  if(!lastMonthlyData||!lastMonthlyMeta) return;
+  const{batch,month,year}=lastMonthlyMeta;
+  const inst=S.profile?.institute||"Govt ITI Dhanuvachapuram";
+  const instructor=S.profile?.name||"";
+  const bname=batch?batch.name:""; const trade=batch?batch.trade:""; const acYear=batch?batch.year:"";
+  const now=new Date().toLocaleDateString("en-IN");
+  const rows=lastMonthlyData.map((s,i)=>{
+    const cls=s.pct<PCT_WARN?"low":s.pct<PCT_WARN+5?"med":"ok";
+    const remark=s.pct<PCT_WARN?"Short":"";
+    return`<tr><td>${i+1}</td><td>${s.adm}</td><td class="name-col">${s.name}</td>
+    <td>${s.monthPoss}</td><td>${s.monthPres}</td><td>${s.cumPoss}</td><td>${s.cumPres}</td>
+    <td class="${cls}">${s.pct}%</td><td style="color:#c00;font-size:10px">${remark}</td></tr>`;
+  }).join("");
+  const win=window.open("","_blank","width=900,height=700");
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Monthly Attendance - ${MONTHS[month]} ${year}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:12px;color:#000;padding:16px}
+.header{text-align:center;margin-bottom:14px}
+.header h1{font-size:16px;font-weight:700;text-transform:uppercase}
+.header h2{font-size:14px;font-weight:700;margin:3px 0}
+.header h3{font-size:12px;font-weight:600;margin:2px 0}
+.header hr{border:none;border-top:2px solid #000;margin:7px 0 4px}
+.header .sub{font-size:11px;color:#333;margin-top:2px}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th{background:#d0d0d0;border:1px solid #888;padding:5px 6px;font-size:10px;font-weight:700;text-align:center}
+td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}
+td.name-col{text-align:left}
+tr:nth-child(even) td{background:#f5f5f5}
+.low{color:#c00;font-weight:700}.med{color:#7a4800;font-weight:700}.ok{color:#155724}
+.sign{margin-top:40px;display:flex;justify-content:space-between}
+.sign div{text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px}
+.footer{margin-top:10px;font-size:10px;color:#666;text-align:right}
+.legend{margin-top:8px;font-size:10px;color:#444;display:flex;gap:16px}
+@page{margin:14mm 12mm;size:A4 portrait}
+</style></head><body>
+<div class="header">
+  <h1>${inst}</h1><h2>${bname} &mdash; Trade: ${trade}</h2>
+  <h3>Monthly Attendance Register &mdash; ${MONTHS[month]} ${year}</h3>
+  <hr><div class="sub">Academic Year: ${acYear} &nbsp;|&nbsp; Instructor: ${instructor}</div>
+</div>
+<table><thead>
+  <tr><th rowspan="2">Sl</th><th rowspan="2">Adm No</th><th rowspan="2" style="text-align:left;min-width:140px">Name</th>
+  <th colspan="2">This Month</th><th colspan="2">Cumulative</th><th rowspan="2">%</th><th rowspan="2">Remark</th></tr>
+  <tr><th>Possible</th><th>Present</th><th>Possible</th><th>Present</th></tr>
+</thead><tbody>${rows}</tbody></table>
+<div class="legend"><span>P = Present &nbsp; A = Absent &nbsp; CL = Casual Leave &nbsp; ML = Medical Leave</span>
+<span style="margin-left:auto;color:#c00">Below ${PCT_WARN}% flagged</span></div>
+<div class="sign"><div>Date: ${now}</div><div>Class Teacher / Instructor</div><div>Principal</div></div>
+<div class="footer">Printed on ${now} &mdash; ITI Attendance System</div>
+<script>window.onload=()=>{window.print()}<\/script></body></html>`);
+  win.document.close();
+}
+
+// ============================================================
+// PRINT — H1/H2
+// ============================================================
+function printHalfYearReport(){
+  if(!lastHRData||!lastHRMeta) return;
+  const{batch,h1s,h1e,h2s,h2e}=lastHRMeta;
+  const inst=S.profile?.institute||"Govt ITI Dhanuvachapuram";
+  const instructor=S.profile?.name||"";
+  const bname=batch?batch.name:""; const trade=batch?batch.trade:""; const acYear=batch?batch.year:"";
+  const now=new Date().toLocaleDateString("en-IN");
+  const rows=lastHRData.map((s,i)=>{
+    const h1c=s.h1Pct<PCT_WARN?"low":s.h1Pct<PCT_WARN+5?"med":"ok";
+    const h2c=s.h2Pct<PCT_WARN?"low":s.h2Pct<PCT_WARN+5?"med":"ok";
+    return`<tr><td>${i+1}</td><td>${s.adm}</td><td class="name-col">${s.name}</td>
+    <td>${s.h1Poss}</td><td>${s.h1Pres}</td><td class="${h1c}">${s.h1Pct}%</td>
+    <td>${s.h2Poss}</td><td>${s.h2Pres}</td><td class="${h2c}">${s.h2Pct}%</td></tr>`;
+  }).join("");
+  const win=window.open("","_blank","width=900,height=700");
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>H1/H2 Attendance - ${bname}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:12px;color:#000;padding:16px}
+.header{text-align:center;margin-bottom:14px}
+.header h1{font-size:16px;font-weight:700;text-transform:uppercase}
+.header h2{font-size:14px;font-weight:700;margin:3px 0}
+.header h3{font-size:12px;font-weight:600;margin:2px 0}
+.header hr{border:none;border-top:2px solid #000;margin:7px 0 4px}
+table{width:100%;border-collapse:collapse;margin-top:8px}
+th{border:1px solid #888;padding:5px 6px;font-size:10px;font-weight:700;text-align:center;background:#d0d0d0}
+th.h1{background:#b8d4ee}th.h2{background:#b8e0c4}
+td{border:1px solid #bbb;padding:4px 6px;text-align:center;font-size:11px}
+td.name-col{text-align:left}
+tr:nth-child(even) td{background:#f5f5f5}
+.low{color:#c00;font-weight:700}.med{color:#7a4800;font-weight:700}.ok{color:#155724}
+.sign{margin-top:40px;display:flex;justify-content:space-between}
+.sign div{text-align:center;width:180px;border-top:1px solid #000;padding-top:4px;font-size:11px}
+.footer{margin-top:10px;font-size:10px;color:#666;text-align:right}
+.period{font-size:10px;color:#444;margin-top:6px;display:flex;gap:24px;justify-content:center}
+@page{margin:14mm 12mm;size:A4 landscape}
+</style></head><body>
+<div class="header">
+  <h1>${inst}</h1><h2>${bname} &mdash; Trade: ${trade}</h2>
+  <h3>Half-Year Attendance Summary &mdash; Academic Year: ${acYear}</h3>
+  <hr><div class="period"><span><strong>H1:</strong> ${h1s} to ${h1e}</span>
+  <span><strong>H2:</strong> ${h2s} to ${h2e}</span><span>Instructor: ${instructor}</span></div>
+</div>
+<table><thead>
+  <tr><th rowspan="2">Sl</th><th rowspan="2">Adm No</th><th rowspan="2" style="text-align:left;min-width:150px">Name</th>
+  <th colspan="3" class="h1">H1 &mdash; First Half</th><th colspan="3" class="h2">H2 &mdash; Second Half</th></tr>
+  <tr><th class="h1">Possible</th><th class="h1">Present</th><th class="h1">%</th>
+  <th class="h2">Possible</th><th class="h2">Present</th><th class="h2">%</th></tr>
+</thead><tbody>${rows}</tbody></table>
+<div style="margin-top:6px;font-size:10px;color:#c00">Students below ${PCT_WARN}% highlighted in red.</div>
+<div class="sign"><div>Date: ${now}</div><div>Class Teacher / Instructor</div><div>Principal</div></div>
+<div class="footer">Printed on ${now} &mdash; ITI Attendance System</div>
+<script>window.onload=()=>{window.print()}<\/script></body></html>`);
+  win.document.close();
+}
+
+// ============================================================
+// EVENT BINDING
+// ============================================================
+function bindPageEvents(){
+  const c=document.getElementById("page-content");
+  if(!c) return;
+  c.addEventListener("change",handleChange);
+  c.addEventListener("click",handleClick);
+  const ms=document.getElementById("modal-slot");
+  if(ms){ms.addEventListener("click",handleClick);}
+  // Settings signout
+  const so=document.getElementById("btn-signout");
+  if(so) so.addEventListener("click",()=>signOut(auth));
+}
+
+function handleChange(e){
+  const t=e.target;
+  if(t.id==="batch-filter"){S.studFilter=t.value;refreshPage();}
+  else if(t.id==="att-batch"){S.attState.batchId=t.value;loadAttPageData();}
+  else if(t.id==="att-month"){S.attState.month=parseInt(t.value);loadAttPageData();}
+  else if(t.id==="att-year"){S.attState.year=parseInt(t.value)||TODAY.getFullYear();loadAttPageData();}
+  else if(t.id==="att-day"){S.attState.day=parseInt(t.value);refreshPage();}
+  else if(t.id==="rep-batch"){S.monthRep.batchId=t.value;}
+  else if(t.id==="rep-month"){S.monthRep.month=parseInt(t.value);}
+  else if(t.id==="rep-year"){S.monthRep.year=parseInt(t.value)||TODAY.getFullYear();}
+  else if(t.id==="hr-batch"){S.hrState.batchId=t.value;}
+  else if(t.id==="hr-h1s"){S.hrState.h1s=t.value;}
+  else if(t.id==="hr-h1e"){S.hrState.h1e=t.value;}
+  else if(t.id==="hr-h2s"){S.hrState.h2s=t.value;}
+  else if(t.id==="hr-h2e"){S.hrState.h2e=t.value;}
+}
+
+async function loadAttPageData(){
+  setLoading(true);
+  try{
+    await Promise.all([loadStudents(), loadAttendanceMonth(S.attState.year,S.attState.month)]);
+    if(!S.attState.batchId&&S.batches.length) S.attState.batchId=S.batches[0].id;
+    refreshPage();
+  }catch(e){toast(e.message,"error");refreshPage();}
+  finally{setLoading(false);}
+}
+
+async function loadStudentsPageData(){
+  setLoading(true);
+  try{ await loadStudents(); refreshPage(); }
+  catch(e){toast(e.message,"error");refreshPage();}
+  finally{setLoading(false);}
+}
+
+async function handleClick(e){
+  const btn=e.target.closest("[data-action]");
+  if(!btn) return;
+  const a=btn.dataset.action;
+
+  if(a==="go-batches")   {S.page="batches";   refreshPage();return;}
+  if(a==="go-students")  {S.page="students";  loadStudentsPageData();return;}
+  if(a==="go-attendance"){S.page="attendance"; loadAttPageData();return;}
+  if(a==="go-monthly")   {S.page="monthly";   refreshPage();return;}
+  if(a==="go-halfyear")  {S.page="halfyear";  refreshPage();return;}
+
+  // Batch CRUD
+  if(a==="add-batch")  {batchModal("");return;}
+  if(a==="edit-batch") {batchModal(btn.dataset.id);return;}
+  if(a==="save-batch") {
+    const nm=document.getElementById("m-bname").value.trim();
+    const tr=document.getElementById("m-btrade").value.trim();
+    const yr=document.getElementById("m-byear").value.trim();
+    if(!nm){toast("Batch name required","error");return;}
+    setLoading(true);
+    try{
+      const id=btn.dataset.id||uid();
+      const batch={id,name:nm,trade:tr,year:yr};
+      await saveBatchFS(batch);
+      if(!btn.dataset.id) S.batches.push(batch);
+      else{const b=S.batches.find(x=>x.id===btn.dataset.id);if(b){b.name=nm;b.trade=tr;b.year=yr;}}
+      S.batches.sort((a,b)=>a.name.localeCompare(b.name));
+      closeModal();refreshPage();toast("Batch saved");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+  if(a==="del-batch"){
+    if(!confirm("Delete this batch and all its students?"))return;
+    setLoading(true);
+    try{
+      await deleteBatchFS(btn.dataset.id);
+      S.batches=S.batches.filter(b=>b.id!==btn.dataset.id);
+      S.students=S.students.filter(s=>s.batchId!==btn.dataset.id);
+      refreshPage();toast("Batch deleted");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+
+  // Student CRUD
+  if(a==="add-student")  {studentModal("");return;}
+  if(a==="edit-student") {studentModal(btn.dataset.id);return;}
+  if(a==="save-student") {
+    const adm=document.getElementById("m-sadm").value.trim();
+    const nm=document.getElementById("m-sname").value.trim().toUpperCase();
+    const bid=document.getElementById("m-sbatch").value;
+    if(!nm||!bid){toast("Name and batch required","error");return;}
+    setLoading(true);
+    try{
+      const id=btn.dataset.id||uid();
+      const student={id,adm,name:nm,batchId:bid};
+      await saveStudentFS(student);
+      if(!btn.dataset.id) S.students.push(student);
+      else{const s=S.students.find(x=>x.id===btn.dataset.id);if(s){s.adm=adm;s.name=nm;s.batchId=bid;}}
+      S.students.sort((a,b)=>a.name.localeCompare(b.name));
+      closeModal();refreshPage();toast("Student saved");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+  if(a==="del-student"){
+    if(!confirm("Remove this student?"))return;
+    setLoading(true);
+    try{
+      await deleteStudentFS(btn.dataset.id);
+      S.students=S.students.filter(s=>s.id!==btn.dataset.id);
+      refreshPage();toast("Student removed");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+
+  // Attendance marking — optimistic UI + background save
+  if(a==="mark-sess"){
+    const{sid,dk,sess,val}=btn.dataset;
+    const cur=(S.attendance[dk]||{})[sid]||{fn:"",an:""};
+    const fn=sess==="fn"?val:cur.fn;
+    const an=sess==="an"?val:cur.an;
+    if(!S.attendance[dk])S.attendance[dk]={};
+    S.attendance[dk][sid]={fn,an};
+    refreshPage();
+    saveAttendanceFS(dk,sid,fn,an).catch(e=>toast("Save error: "+e.message,"error"));
+    return;
+  }
+  if(a==="mark-both"){bothModal(btn.dataset.sid,btn.dataset.dk,btn.dataset.fn,btn.dataset.an);return;}
+  if(a==="mark-both-val"){
+    const{sid,dk,val}=btn.dataset;
+    if(!S.attendance[dk])S.attendance[dk]={};
+    S.attendance[dk][sid]={fn:val,an:val};
+    closeModal();refreshPage();
+    saveAttendanceFS(dk,sid,val,val).catch(e=>toast("Save error: "+e.message,"error"));
+    return;
+  }
+  if(a==="mark-all-present"||a==="mark-all-absent"){
+    const v=a==="mark-all-present"?"P":"A";
+    const{batchId,year,month,day}=S.attState;
+    const d=Math.min(day,daysInMonth(year,month));
+    const dk=`${year}-${pad(month+1)}-${pad(d)}`;
+    const students=S.students.filter(s=>s.batchId===batchId);
+    if(!S.attendance[dk])S.attendance[dk]={};
+    students.forEach(s=>S.attendance[dk][s.id]={fn:v,an:v});
+    refreshPage();
+    markAllFS(dk,students.map(s=>s.id),v,v).catch(e=>toast("Save error: "+e.message,"error"));
+    return;
+  }
+
+  // Reports
+  if(a==="load-monthly"){
+    setLoading(true,"Generating report...");
+    try{
+      // Load full year attendance for cumulative calculation
+      await loadAttendanceMonth(S.monthRep.year, S.monthRep.month);
+      // Also load all previous months of the year for cumulative
+      for(let m=0;m<S.monthRep.month;m++){
+        await loadAttendanceMonth(S.monthRep.year, m);
+      }
+      const data=calcMonthlyReport(S.monthRep.batchId,S.monthRep.year,S.monthRep.month);
+      const b=S.batches.find(x=>x.id===S.monthRep.batchId);
+      lastMonthlyData=data; lastMonthlyMeta={batch:b,month:S.monthRep.month,year:S.monthRep.year};
+      const rows=data.map((s,i)=>{
+        const pctCls=s.pct<PCT_WARN?"pct-critical":s.pct<PCT_WARN+5?"pct-warn":"pct-ok";
+        const remark=s.pct<PCT_WARN?"Short attendance":"";
+        return`<tr><td>${i+1}</td><td>${s.adm}</td><td class="fw500" style="text-align:left">${s.name}</td>
+        <td>${s.monthPoss}</td><td>${s.monthPres}</td><td>${s.cumPoss}</td><td>${s.cumPres}</td>
+        <td class="${pctCls}">${s.pct}%</td><td style="font-size:11px;color:var(--danger)">${remark}</td></tr>`;
+      }).join("")||`<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">No data.</td></tr>`;
+      document.getElementById("monthly-result").innerHTML=`
+<div class="report-title"><strong>${S.profile?.institute||"Govt ITI Dhanuvachapuram"}</strong>
+<span class="text-sm text-muted" style="margin-left:10px">${b?b.name:""} &mdash; ${MONTHS[S.monthRep.month]} ${S.monthRep.year}</span></div>
+<div style="overflow-x:auto"><table class="report-table"><thead><tr>
+  <th>Sl</th><th>Adm No</th><th>Name</th>
+  <th>Poss<br><small>(Month)</small></th><th>Present<br><small>(Month)</small></th>
+  <th>Cum.<br>Possible</th><th>Cum.<br>Present</th><th>%</th><th>Remark</th>
+</tr></thead><tbody>${rows}</tbody></table></div>`;
+      const pb=document.getElementById("btn-print-monthly");
+      if(pb)pb.disabled=false;
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+  if(a==="print-monthly"){printMonthlyReport();return;}
+
+  if(a==="load-halfyear"){
+    setLoading(true,"Calculating...");
+    try{
+      await loadAttendanceRange(S.hrState.h1s, S.hrState.h2e);
+      const data=calcHalfYearReport(S.hrState.batchId,S.hrState.h1s,S.hrState.h1e,S.hrState.h2s,S.hrState.h2e);
+      const b=S.batches.find(x=>x.id===S.hrState.batchId);
+      lastHRData=data; lastHRMeta={batch:b,...S.hrState};
+      const rows=data.map((s,i)=>{
+        const h1c=s.h1Pct<PCT_WARN?"pct-critical":s.h1Pct<PCT_WARN+5?"pct-warn":"pct-ok";
+        const h2c=s.h2Pct<PCT_WARN?"pct-critical":s.h2Pct<PCT_WARN+5?"pct-warn":"pct-ok";
+        return`<tr><td>${i+1}</td><td>${s.adm}</td><td class="fw500" style="text-align:left">${s.name}</td>
+        <td>${s.h1Poss}</td><td>${s.h1Pres}</td><td class="${h1c}">${s.h1Pct}%</td>
+        <td>${s.h2Poss}</td><td>${s.h2Pres}</td><td class="${h2c}">${s.h2Pct}%</td></tr>`;
+      }).join("")||`<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">No data.</td></tr>`;
+      document.getElementById("hr-result").innerHTML=`
+<div class="report-title"><strong>H1 / H2 Attendance Summary</strong>
+<span class="text-sm text-muted" style="margin-left:10px">${b?b.name:""}</span></div>
+<div style="overflow-x:auto"><table class="report-table"><thead>
+  <tr><th rowspan="2">Sl</th><th rowspan="2">Adm No</th><th rowspan="2" style="text-align:left">Name</th>
+  <th colspan="3" style="background:var(--accent-bg);color:var(--accent)">H1 (First Half)</th>
+  <th colspan="3" style="background:var(--success-bg);color:var(--success)">H2 (Second Half)</th></tr>
+  <tr><th style="background:var(--accent-bg)">Possible</th><th style="background:var(--accent-bg)">Present</th><th style="background:var(--accent-bg)">%</th>
+  <th style="background:var(--success-bg)">Possible</th><th style="background:var(--success-bg)">Present</th><th style="background:var(--success-bg)">%</th></tr>
+</thead><tbody>${rows}</tbody></table></div>`;
+      const pb=document.getElementById("btn-print-halfyear");
+      if(pb)pb.disabled=false;
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+  if(a==="print-halfyear"){printHalfYearReport();return;}
+
+  // Settings
+  if(a==="edit-profile"){
+    const p=S.profile||{};
+    showModal(`
+<div class="modal-header"><h3>Edit profile</h3><button class="btn-icon" onclick="closeModal()">✕</button></div>
+<div class="modal-body">
+  <div class="form-group"><label class="form-label">Name</label><input id="ep-name" value="${p.name||""}"/></div>
+  <div class="form-group"><label class="form-label">Institute</label><input id="ep-inst" value="${p.institute||""}"/></div>
+  <div class="form-group"><label class="form-label">Trade</label><input id="ep-trade" value="${p.trade||""}"/></div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+  <button class="btn btn-primary" data-action="save-profile">Save</button>
+</div>`);
+    return;
+  }
+  if(a==="save-profile"){
+    const nm=document.getElementById("ep-name").value.trim();
+    const inst=document.getElementById("ep-inst").value.trim();
+    const trade=document.getElementById("ep-trade").value.trim();
+    if(!nm){toast("Name required","error");return;}
+    setLoading(true);
+    try{
+      await saveProfile({...S.profile,name:nm,institute:inst,trade});
+      closeModal();refreshPage();toast("Profile updated");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+  if(a==="change-pin"){
+    const np=document.getElementById("new-pin")?.value.trim();
+    const np2=document.getElementById("new-pin2")?.value.trim();
+    if(!/^\d{4}$/.test(np)){toast("PIN must be 4 digits","error");return;}
+    if(np!==np2){toast("PINs do not match","error");return;}
+    setLoading(true);
+    try{
+      const pinHash=await hashPin(np);
+      await saveProfile({...S.profile,pinHash});
+      toast("PIN updated successfully");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+}
+
+// make closeModal global for inline onclick
+window.closeModal = closeModal;
+</script>
+</body>
+</html>
