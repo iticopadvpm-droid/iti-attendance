@@ -303,8 +303,11 @@ async function deleteStudentFS(id) {
 async function loadAttendanceMonth(year, month) {
   const from = `${year}-${pad(month+1)}-01`;
   const to   = `${year}-${pad(month+1)}-${pad(daysInMonth(year,month))}`;
-  const snap = await getDocs(query(attColRef(), where("__name__",">=",from), where("__name__","<=",to)));
-  snap.docs.forEach(d => { S.attendance[d.id] = d.data(); });
+  // Firestore doesn't support __name__ range queries — fetch all and filter client-side
+  const snap = await getDocs(attColRef());
+  snap.docs.forEach(d => {
+    if (d.id >= from && d.id <= to) S.attendance[d.id] = d.data();
+  });
 }
 
 async function saveAttendanceFS(dk, sid, fn, an) {
@@ -366,9 +369,16 @@ function calcMonthlyReport(batchId, year, month) {
 }
 
 async function loadAttendanceRange(from, to) {
-  // Load attendance for a date range (for H1/H2)
-  const snap = await getDocs(query(attColRef(),
-    where("__name__",">=",from), where("__name__","<=",to)));
+  // Fetch all attendance docs and filter client-side (Firestore __name__ range not supported)
+  const snap = await getDocs(attColRef());
+  snap.docs.forEach(d => {
+    if (d.id >= from && d.id <= to) S.attendance[d.id] = d.data();
+  });
+}
+
+async function loadAllAttendance() {
+  // Load every attendance document for this instructor — filter client-side
+  const snap = await getDocs(attColRef());
   snap.docs.forEach(d => { S.attendance[d.id] = d.data(); });
 }
 
@@ -1340,12 +1350,8 @@ async function handleClick(e){
   if(a==="load-monthly"){
     setLoading(true,"Generating report...");
     try{
-      // Load full year attendance for cumulative calculation
-      await loadAttendanceMonth(S.monthRep.year, S.monthRep.month);
-      // Also load all previous months of the year for cumulative
-      for(let m=0;m<S.monthRep.month;m++){
-        await loadAttendanceMonth(S.monthRep.year, m);
-      }
+      // Load all attendance docs at once for accurate cumulative totals
+      await loadAllAttendance();
       const data=calcMonthlyReport(S.monthRep.batchId,S.monthRep.year,S.monthRep.month);
       const b=S.batches.find(x=>x.id===S.monthRep.batchId);
       lastMonthlyData=data; lastMonthlyMeta={batch:b,month:S.monthRep.month,year:S.monthRep.year};
@@ -1375,7 +1381,7 @@ async function handleClick(e){
   if(a==="load-halfyear"){
     setLoading(true,"Calculating...");
     try{
-      await loadAttendanceRange(S.hrState.h1s, S.hrState.h2e);
+      await loadAllAttendance();
       const data=calcHalfYearReport(S.hrState.batchId,S.hrState.h1s,S.hrState.h1e,S.hrState.h2s,S.hrState.h2e);
       const b=S.batches.find(x=>x.id===S.hrState.batchId);
       lastHRData=data; lastHRMeta={batch:b,...S.hrState};
