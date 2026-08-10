@@ -82,6 +82,7 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 .sess-btn{padding:4px 7px;border-radius:4px;border:1px solid var(--border2);font-size:11px;font-weight:600;background:var(--surface2);color:var(--text3);cursor:pointer;transition:all .1s;min-width:32px;text-align:center}
 .sess-btn.P{background:#dcfce7;color:#15803d;border-color:#86efac}
 .sess-btn.A{background:#fee2e2;color:#dc2626;border-color:#fca5a5}
+.sess-btn.Pe{background:#f3e8ff;color:#7c3aed;border-color:#c4b5fd}
 .sess-btn.CL{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
 .sess-btn.ML{background:#fef3c7;color:#b45309;border-color:#fcd34d}
 .att-footer{padding:10px 12px;background:var(--surface2);border-top:1px solid var(--border);display:flex;gap:20px;flex-wrap:wrap;font-size:12px}
@@ -154,6 +155,7 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 .mark-a{font-weight:700;font-size:12px;color:#dc2626}
 .mark-asl{font-weight:700;font-size:11px;color:#dc2626}
 .mark-asr{font-weight:700;font-size:11px;color:#dc2626}
+.mark-pe{font-weight:900;font-size:12px;color:#7c3aed}
 .mark-cl{font-weight:700;font-size:10px;color:#2563eb}
 .mark-ml{font-weight:700;font-size:10px;color:#d97706}
 /* Day header colors */
@@ -184,6 +186,7 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 .ab-ptable .msl{font-weight:900;font-size:11px}
 .ab-ptable .msr{font-weight:900;font-size:11px}
 .ab-ptable .ma{font-weight:700;font-size:9px;color:#c00}
+.ab-ptable .mpe{font-weight:900;font-size:10px;color:#6d28d9}
 .ab-ptable .mcl{font-weight:700;font-size:8px;color:#1d4ed8}
 .ab-ptable .mml{font-weight:700;font-size:8px;color:#b45309}
 .ab-sign{margin-top:16px;display:flex;justify-content:space-between}
@@ -252,8 +255,8 @@ const db   = getFirestore(app);
 // ============================================================
 const MONTHS = ["January","February","March","April","May","June",
                 "July","August","September","October","November","December"];
-const SESS = ["P","A","CL","ML"];
-const SESS_LABEL = { P:"Present", A:"Absent", CL:"Casual Leave", ML:"Medical Leave" };
+const SESS = ["P","A","Pe","CL","ML"];
+const SESS_LABEL = { P:"Present", A:"Absent", Pe:"Permission", CL:"Casual Leave", ML:"Medical Leave" };
 const POSITIONS = [
   {val:"SI",  label:"Senior Instructor"},
   {val:"JI",  label:"Junior Instructor"},
@@ -420,7 +423,7 @@ function calcMonthlyReport(batchId, year, month) {
       const r = rec[s.id];
       if (!r.fn && !r.an) continue;
       const poss = (r.fn?0.5:0)+(r.an?0.5:0);
-      const pres = (r.fn==="P"?0.5:0)+(r.an==="P"?0.5:0);
+      const pres = ((r.fn==="P"||r.fn==="Pe")?0.5:0)+((r.an==="P"||r.an==="Pe")?0.5:0);
       if (dk >= firstDay && dk <= lastDay) { mPoss+=poss; mPres+=pres; }
       if (dk <= lastDay) { cumPoss+=poss; cumPres+=pres; }
     }
@@ -496,7 +499,7 @@ function calcHalfYearReport(batchId, h1s, h1e, h2s, h2e) {
       const r = rec[s.id];
       if (!r.fn && !r.an) continue;
       const poss = (r.fn?0.5:0)+(r.an?0.5:0);
-      const pres = (r.fn==="P"?0.5:0)+(r.an==="P"?0.5:0);
+      const pres = ((r.fn==="P"||r.fn==="Pe")?0.5:0)+((r.an==="P"||r.an==="Pe")?0.5:0);
       if (dk>=h1s&&dk<=h1e){ h1Poss+=poss; h1Pres+=pres; }
       if (dk>=h2s&&dk<=h2e){ h2Poss+=poss; h2Pres+=pres; }
     }
@@ -967,7 +970,7 @@ function renderDashboard(){
       if(!rec[s.id])continue;
       const r=rec[s.id];
       if(r.fn)poss+=0.5; if(r.an)poss+=0.5;
-      if(r.fn==="P")pres+=0.5; if(r.an==="P")pres+=0.5;
+      if(r.fn==="P"||r.fn==="Pe")pres+=0.5; if(r.an==="P"||r.an==="Pe")pres+=0.5;
     }
     if(poss>0&&Math.round(pres/poss*100)<PCT_WARN)below80++;
   }
@@ -1053,7 +1056,7 @@ function renderAttendance(){
   let fnP=0,anP=0,full=0;
   const rows=students.map((s,idx)=>{
     const att=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
-    if(att.fn==="P")fnP++; if(att.an==="P")anP++; if(att.fn==="P"&&att.an==="P")full++;
+    if(att.fn==="P"||att.fn==="Pe")fnP++; if(att.an==="P"||att.an==="Pe")anP++; if((att.fn==="P"||att.fn==="Pe")&&(att.an==="P"||att.an==="Pe"))full++;
     const fnBtns=SESS.map(v=>`<button class="sess-btn ${att.fn===v?v:""}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="fn" data-val="${v}">${v}</button>`).join("");
     const anBtns=SESS.map(v=>`<button class="sess-btn ${att.an===v?v:""}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="an" data-val="${v}">${v}</button>`).join("");
     return`<tr>
@@ -1076,6 +1079,7 @@ function renderAttendance(){
       <div class="flex" style="gap:6px;margin-top:18px">
         <button class="btn btn-success btn-sm" data-action="mark-all-present">All Present</button>
         <button class="btn btn-danger btn-sm" data-action="mark-all-absent">All Absent</button>
+        <button class="btn btn-sm" style="background:#f3e8ff;border:1px solid #c4b5fd;color:#7c3aed" data-action="mark-all-permission">All Permission</button>
       </div>
     </div>
   </div>
@@ -1193,35 +1197,47 @@ function renderHalfYear(){
 // ATTENDANCE BOOK
 // ============================================================
 function getCellMark(fn, an) {
-  // CL/ML — full day
   if (fn==="CL"||an==="CL") return {mark:"CL", cls:"mark-cl"};
   if (fn==="ML"||an==="ML") return {mark:"ML", cls:"mark-ml"};
-  const fp = fn==="P", ap = an==="P";
-  const fa = fn==="A", aa = an==="A";
-  if (fp && ap)  return {mark:"✗", cls:"mark-x"};      // both present
-  if (fp && !an) return {mark:"✗", cls:"mark-x"};      // FN only marked
-  if (!fn && ap) return {mark:"✗", cls:"mark-x"};      // AN only marked
-  if (fp && aa)  return {mark:"╲", cls:"mark-sr"};     // FN pres, AN abs  a  if (fa && ap)  return {mark:"╱", cls:"mark-sl"};     // FN abs, AN pres  a/
-  if (fp)        return {mark:"╱", cls:"mark-sl"};     // only FN present
-  if (ap)        return {mark:"╲", cls:"mark-sr"};     // only AN present
-  if (fa && aa)  return {mark:"A", cls:"mark-a"};      // both absent
-  if (fa)        return {mark:"A", cls:"mark-a"};
-  if (aa)        return {mark:"A", cls:"mark-a"};
-  return {mark:"", cls:""};                             // not marked
+  const fp=fn==="P"||fn==="Pe", ap=an==="P"||an==="Pe";
+  const fpe=fn==="Pe", ape=an==="Pe";
+  const fa=fn==="A", aa=an==="A";
+  // Both sessions present (P or Pe)
+  if (fp && ap) {
+    if (fpe && ape) return {mark:"P",  cls:"mark-pe"};  // Pe+Pe
+    if (fpe)        return {mark:"P╱", cls:"mark-pe"};  // Pe+P
+    if (ape)        return {mark:"P╲", cls:"mark-pe"};  // P+Pe
+    return {mark:"✗", cls:"mark-x"};                    // P+P
+  }
+  // FN present, AN absent
+  if (fp && aa) return fpe ? {mark:"P╲",cls:"mark-pe"} : {mark:"╲",cls:"mark-sr"};
+  // FN absent, AN present
+  if (fa && ap) return ape ? {mark:"P╱",cls:"mark-pe"} : {mark:"╱",cls:"mark-sl"};
+  // Only one session marked
+  if (fp && !an) return fpe ? {mark:"P",cls:"mark-pe"} : {mark:"╱",cls:"mark-sl"};
+  if (!fn && ap) return ape ? {mark:"P",cls:"mark-pe"} : {mark:"╲",cls:"mark-sr"};
+  // Both absent
+  if (fa || aa) return {mark:"A", cls:"mark-a"};
+  return {mark:"", cls:""};
 }
 
 function getPrintMark(fn, an) {
   if (fn==="CL"||an==="CL") return {mark:"CL", cls:"mcl"};
   if (fn==="ML"||an==="ML") return {mark:"ML", cls:"mml"};
-  const fp=fn==="P",ap=an==="P",fa=fn==="A",aa=an==="A";
-  if (fp&&ap)  return {mark:"✗",cls:"mx"};
-  if (fp&&!an) return {mark:"✗",cls:"mx"};
-  if (!fn&&ap) return {mark:"✗",cls:"mx"};
-  if (fp&&aa)  return {mark:"╲",cls:"msr"};
-  if (fa&&ap)  return {mark:"╱",cls:"msl"};
-  if (fp)      return {mark:"╱",cls:"msl"};
-  if (ap)      return {mark:"╲",cls:"msr"};
-  if (fa||aa)  return {mark:"A",cls:"ma"};
+  const fp=fn==="P"||fn==="Pe", ap=an==="P"||an==="Pe";
+  const fpe=fn==="Pe", ape=an==="Pe";
+  const fa=fn==="A", aa=an==="A";
+  if (fp&&ap){
+    if(fpe&&ape) return {mark:"P",  cls:"mpe"};
+    if(fpe)      return {mark:"P╱", cls:"mpe"};
+    if(ape)      return {mark:"P╲", cls:"mpe"};
+    return {mark:"✗",cls:"mx"};
+  }
+  if (fp&&aa) return fpe?{mark:"P╲",cls:"mpe"}:{mark:"╲",cls:"msr"};
+  if (fa&&ap) return ape?{mark:"P╱",cls:"mpe"}:{mark:"╱",cls:"msl"};
+  if (fp&&!an) return fpe?{mark:"P",cls:"mpe"}:{mark:"╱",cls:"msl"};
+  if (!fn&&ap) return ape?{mark:"P",cls:"mpe"}:{mark:"╲",cls:"msr"};
+  if (fa||aa) return {mark:"A",cls:"ma"};
   return {mark:"",cls:""};
 }
 
@@ -1260,7 +1276,7 @@ function renderAttBook() {
       // Count poss/pres
       if (r.fn==="CL"||r.fn==="ML") { poss+=1; }
       else { if(r.fn)poss+=0.5; if(r.an)poss+=0.5; }
-      if (r.fn==="P")pres+=0.5; if(r.an==="P")pres+=0.5;
+      if(r.fn==="P"||r.fn==="Pe")pres+=0.5; if(r.an==="P"||r.an==="Pe")pres+=0.5;
       const bgCls = (r.fn==="A"&&r.an==="A")?"cell-absent":"";
       return `<td class="${bgCls}" title="${dk} FN:${r.fn||"-"} AN:${r.an||"-"}"><span class="${cls}">${mark}</span></td>`;
     }).join("");
@@ -1333,9 +1349,12 @@ function renderAttBook() {
 <div class="card mt12" style="padding:10px 14px;font-size:11px;color:var(--text3)">
   <strong>Legend:</strong>
   &nbsp;✗ = Full day present &nbsp;
-  ╱ = FN present only &nbsp;
-  ╲ = AN present only &nbsp;
-  A = Full day absent &nbsp;
+  ╱ = FN present &nbsp;
+  ╲ = AN present &nbsp;
+  <span style="color:#7c3aed;font-weight:700">P</span> = Permission (full) &nbsp;
+  <span style="color:#7c3aed;font-weight:700">P╱</span> = Pe+P or A+Pe (FN) &nbsp;
+  <span style="color:#7c3aed;font-weight:700">P╲</span> = P+Pe or Pe+A (AN) &nbsp;
+  A = Absent &nbsp;
   CL = Casual Leave &nbsp;
   ML = Medical Leave &nbsp;
   <span style="background:#fee2e2;padding:1px 5px;border-radius:3px">Red</span> = Sunday &nbsp;
@@ -1422,9 +1441,9 @@ function bothModal(sid,dk,fn,an){
 <div class="modal-header"><h3>Mark both sessions</h3><button class="btn-icon" onclick="closeModal()">✕</button></div>
 <div class="modal-body">
   <p class="text-sm text-muted mb16">Apply same status to both FN and AN.</p>
-  <div class="grid2" style="gap:8px">
-    ${SESS.map(v=>`<button class="btn btn-secondary" style="padding:16px;font-size:15px;font-weight:600" data-action="mark-both-val" data-sid="${sid}" data-dk="${dk}" data-val="${v}">
-      ${v}<span style="font-size:11px;font-weight:400;display:block;color:var(--text3)">${SESS_LABEL[v]}</span>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+    ${SESS.map(v=>`<button class="btn btn-secondary" style="padding:12px;font-size:14px;font-weight:600" data-action="mark-both-val" data-sid="${sid}" data-dk="${dk}" data-val="${v}">
+      ${v}<span style="font-size:10px;font-weight:400;display:block;color:var(--text3)">${SESS_LABEL[v]}</span>
     </button>`).join("")}
   </div>
 </div>`);
@@ -1435,10 +1454,9 @@ function bothModal(sid,dk,fn,an){
 // ============================================================
 function printAttBook() {
   const {batchId, year, month} = attBookState;
-  // sync print details from inputs
-  const name = document.getElementById("ab-pd-name")?.value.trim() || S.printDetails.name;
+  const name = (document.getElementById("ab-pd-name")?.value||S.printDetails.name).trim();
   const pos  = document.getElementById("ab-pd-pos")?.value || S.printDetails.position;
-  const trade= document.getElementById("ab-pd-trade")?.value.trim() || S.printDetails.trade;
+  const trade= (document.getElementById("ab-pd-trade")?.value||S.printDetails.trade).trim();
   const printDate = document.getElementById("ab-pd-date")?.checked ?? S.printDetails.printDate;
   const instrLabel = `${name} (${pos}, ${trade})`;
   const now = new Date().toLocaleDateString("en-IN");
@@ -1450,14 +1468,12 @@ function printAttBook() {
   const totalDays = daysInMonth(year, month);
   const days = Array.from({length:totalDays},(_,i)=>i+1);
   const monthLabel = `${MONTHS[month]} ${year}`;
-
-  // Split days into 2 halves — days 1-16 on page 1, 17-31 on page 2
   const half1 = days.filter(d=>d<=16);
   const half2 = days.filter(d=>d>16);
 
   function buildPageHTML(halfDays, pageNum) {
     const isPage1 = pageNum===1;
-    // Day headers
+
     const dayHdrs = halfDays.map(d=>{
       const dt=new Date(year,month,d); const dow=dt.getDay();
       const dk=`${year}-${pad(month+1)}-${pad(d)}`;
@@ -1467,10 +1483,9 @@ function printAttBook() {
       return `<th class="${cls}" style="min-width:18px;font-size:8px">${d}<br><span style="font-size:7px;font-weight:400">${dn}</span></th>`;
     }).join("");
 
-    // Student rows
     const studentRows = students.map((s,idx)=>{
-      let poss=0,pres=0;
-      // Calculate full month totals for stat columns
+      // Month totals
+      let poss=0, pres=0;
       days.forEach(d=>{
         const dk=`${year}-${pad(month+1)}-${pad(d)}`;
         const dt=new Date(year,month,d);
@@ -1478,9 +1493,23 @@ function printAttBook() {
         const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
         if(r.fn==="CL"||r.fn==="ML"){poss+=1;}
         else{if(r.fn)poss+=0.5; if(r.an)poss+=0.5;}
-        if(r.fn==="P")pres+=0.5; if(r.an==="P")pres+=0.5;
+        if(r.fn==="P"||r.fn==="Pe")pres+=0.5;
+        if(r.an==="P"||r.an==="Pe")pres+=0.5;
       });
-      const pct=poss>0?Math.round(pres/poss*100):0;
+      // Cumulative totals
+      const lastDay=`${year}-${pad(month+1)}-${pad(daysInMonth(year,month))}`;
+      let cumPoss=0, cumPres=0;
+      for(const [dk,rec] of Object.entries(S.attendance)){
+        if(dk>lastDay) continue;
+        const r=rec[s.id];
+        if(!r||(!r.fn&&!r.an)) continue;
+        if(r.fn==="CL"||r.fn==="ML"){cumPoss+=1;}
+        else{if(r.fn)cumPoss+=0.5; if(r.an)cumPoss+=0.5;}
+        if(r.fn==="P"||r.fn==="Pe")cumPres+=0.5;
+        if(r.an==="P"||r.an==="Pe")cumPres+=0.5;
+      }
+      const pct=cumPoss>0?Math.round(cumPres/cumPoss*100):0;
+      const pctStyle=pct<PCT_WARN?"color:#c00;font-weight:700":pct<PCT_WARN+5?"color:#b45309;font-weight:700":"color:#166534";
 
       const cells = halfDays.map(d=>{
         const dk=`${year}-${pad(month+1)}-${pad(d)}`;
@@ -1493,42 +1522,39 @@ function printAttBook() {
         return `<td><span class="${cls}">${mark}</span></td>`;
       }).join("");
 
-      // Page 1: Sl + Name + days1-16 + Poss
-      // Page 2: Sl + Name + days17-31 + Pres + %
       if(isPage1){
-        return `<tr><td class="psl">${idx+1}</td><td class="pname">${s.name}</td>${cells}<td class="pstat">${poss}</td></tr>`;
+        return `<tr><td class="psl">${idx+1}</td><td class="pname">${s.name}</td>${cells}</tr>`;
       } else {
-        const pctStyle=pct<PCT_WARN?"color:#c00;":pct<PCT_WARN+5?"color:#b45309;":"color:#166534;";
-        return `<tr><td class="psl">${idx+1}</td><td class="pname">${s.name}</td>${cells}<td class="pstat">${pres}</td><td class="pstat" style="${pctStyle}">${pct}%</td></tr>`;
+        return `<tr>
+          <td class="psl">${idx+1}</td><td class="pname">${s.name}</td>
+          ${cells}
+          <td class="pstat">${poss}</td><td class="pstat">${pres}</td>
+          <td class="pstat">${cumPoss}</td><td class="pstat">${cumPres}</td>
+          <td class="pstat" style="${pctStyle}">${pct}%</td>
+        </tr>`;
       }
     }).join("");
 
-    const extraCols = isPage1
-      ? `<th class="pstat">Poss</th>`
-      : `<th class="pstat">Pres</th><th class="pstat">%</th>`;
+    const extraCols = isPage1 ? `` :
+      `<th class="pstat">Poss</th><th class="pstat">Pres</th>
+       <th class="pstat">Cum<br>Poss</th><th class="pstat">Cum<br>Pres</th>
+       <th class="pstat">%</th>`;
 
-    return `
-<div class="ab-print-page">
+    return `<div class="ab-print-page">
   <div class="ab-print-header">
-    <h1>${inst}</h1>
-    <h2>Trade: ${btrade} — ${bname}</h2>
-    <h3>Attendance Register — ${monthLabel} &nbsp;|&nbsp; Academic Year: ${acYear}</h3>
-    <hr>
-    <div style="font-size:9px;color:#333">${instrLabel} &nbsp;|&nbsp; Page ${pageNum} of 2 &nbsp;|&nbsp; Days ${halfDays[0]}–${halfDays[halfDays.length-1]}</div>
+    <h1>${inst}</h1><h2>Trade: ${btrade} — ${bname}</h2>
+    <h3>Attendance Register — ${monthLabel} | Academic Year: ${acYear}</h3>
+    <hr><div style="font-size:9px;color:#333">${instrLabel} | Page ${pageNum} of 2 | Days ${halfDays[0]}–${halfDays[halfDays.length-1]}</div>
   </div>
-  <table class="ab-ptable">
-    <thead>
-      <tr>
-        <th style="min-width:18px">#</th>
-        <th style="text-align:left;min-width:90px">Name</th>
-        ${dayHdrs}
-        ${extraCols}
-      </tr>
-    </thead>
-    <tbody>${studentRows}</tbody>
-  </table>
+  <table class="ab-ptable"><thead><tr>
+    <th style="min-width:18px">#</th>
+    <th style="text-align:left;min-width:90px">Name</th>
+    ${dayHdrs}${extraCols}
+  </tr></thead><tbody>${studentRows}</tbody></table>
   <div style="margin-top:6px;font-size:8px;color:#555">
-    ✗=Full day present &nbsp; ╱=FN present &nbsp; ╲=AN present &nbsp; A=Absent &nbsp; CL=Casual Leave &nbsp; ML=Medical Leave &nbsp; H=Holiday
+    ✗=Present &nbsp; ╱=FN present &nbsp; ╲=AN present &nbsp;
+    <span style="color:#6d28d9;font-weight:700">P</span>=Permission &nbsp;
+    A=Absent &nbsp; CL=Casual Leave &nbsp; ML=Medical Leave &nbsp; H=Holiday
   </div>
   <div class="ab-sign">
     <div>${dateStr}</div>
@@ -1541,10 +1567,9 @@ function printAttBook() {
 
   const page1 = buildPageHTML(half1, 1);
   const page2 = buildPageHTML(half2, 2);
-
   const win = window.open("","_blank","width=800,height=700");
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>Attendance Register — ${monthLabel}</title>
+<title>Attendance Register - ${monthLabel}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;font-size:10px;color:#000}
@@ -1561,14 +1586,11 @@ body{font-family:Arial,sans-serif;font-size:10px;color:#000}
 .ab-ptable td.pname{text-align:left;padding-left:3px;font-weight:500;min-width:90px}
 .ab-ptable td.psl{font-size:8px;color:#555;min-width:16px}
 .ab-ptable td.pstat{font-weight:700;font-size:9px;min-width:24px}
-.sun{background:#fee2e2!important}
-.hol{background:#fed7aa!important}
-.mx{font-weight:900;font-size:13px}
-.msl{font-weight:900;font-size:12px}
-.msr{font-weight:900;font-size:12px}
+.sun{background:#fee2e2!important}.hol{background:#fed7aa!important}
+.mx{font-weight:900;font-size:13px}.msl{font-weight:900;font-size:12px}.msr{font-weight:900;font-size:12px}
 .ma{font-weight:700;font-size:9px;color:#c00}
-.mcl{font-weight:700;font-size:8px;color:#1d4ed8}
-.mml{font-weight:700;font-size:8px;color:#b45309}
+.mpe{font-weight:900;font-size:10px;color:#6d28d9}
+.mcl{font-weight:700;font-size:8px;color:#1d4ed8}.mml{font-weight:700;font-size:8px;color:#b45309}
 .ab-sign{margin-top:14px;display:flex;justify-content:space-between}
 .ab-sign div{text-align:center;min-width:110px;border-top:1px solid #000;padding-top:3px;font-size:9px;font-weight:700}
 .ab-sign div small{display:block;font-size:7px;font-weight:400;color:#555;margin-top:1px}
@@ -1893,8 +1915,8 @@ async function handleClick(e){
     saveAttendanceFS(dk,sid,val,val).catch(e=>toast("Save error: "+e.message,"error"));
     return;
   }
-  if(a==="mark-all-present"||a==="mark-all-absent"){
-    const v=a==="mark-all-present"?"P":"A";
+  if(a==="mark-all-present"||a==="mark-all-absent"||a==="mark-all-permission"){
+    const v=a==="mark-all-present"?"P":a==="mark-all-permission"?"Pe":"A";
     const{batchId,year,month,day}=S.attState;
     const d=Math.min(day,daysInMonth(year,month));
     const dk=`${year}-${pad(month+1)}-${pad(d)}`;
