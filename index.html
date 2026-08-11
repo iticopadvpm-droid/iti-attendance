@@ -340,6 +340,18 @@ const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
+// Enable offline persistence so attendance works without internet
+import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js")
+  .then(({enableIndexedDbPersistence}) => {
+    enableIndexedDbPersistence(db).catch(err => {
+      if (err.code === 'failed-precondition') {
+        console.warn('Offline persistence unavailable: multiple tabs open');
+      } else if (err.code === 'unimplemented') {
+        console.warn('Offline persistence not supported in this browser');
+      }
+    });
+  }).catch(()=>{});
+
 // ============================================================
 // CONSTANTS
 // ============================================================
@@ -436,11 +448,26 @@ async function saveBatchFS(batch) {
 async function deleteBatchFS(id) {
   setSyncStatus("syncing");
   await deleteDoc(batchRef(id));
-  // delete students in batch
-  const snap = await getDocs(query(studentsRef(), where("batchId","==",id)));
+  // Delete students in batch
+  const stuSnap = await getDocs(query(studentsRef(), where("batchId","==",id)));
+  const studentIds = stuSnap.docs.map(d=>d.id);
   const batch2 = writeBatch(db);
-  snap.docs.forEach(d => batch2.delete(d.ref));
+  stuSnap.docs.forEach(d => batch2.delete(d.ref));
   await batch2.commit();
+  // Remove deleted students from all attendance docs
+  if (studentIds.length > 0) {
+    const attSnap = await getDocs(attColRef());
+    const cleanBatch = writeBatch(db);
+    let hasChanges = false;
+    for (const attDoc of attSnap.docs) {
+      const data = attDoc.data();
+      const cleaned = {...data};
+      let changed = false;
+      studentIds.forEach(sid => { if (cleaned[sid] !== undefined) { delete cleaned[sid]; changed = true; } });
+      if (changed) { cleanBatch.set(attDoc.ref, cleaned); hasChanges = true; }
+    }
+    if (hasChanges) await cleanBatch.commit();
+  }
   setSyncStatus("ok");
 }
 
@@ -459,6 +486,22 @@ async function saveStudentFS(student) {
 async function deleteStudentFS(id) {
   setSyncStatus("syncing");
   await deleteDoc(studentRef(id));
+  // Remove student's attendance records from all attendance docs
+  try {
+    const attSnap = await getDocs(attColRef());
+    const batch2 = writeBatch(db);
+    let hasChanges = false;
+    for (const attDoc of attSnap.docs) {
+      const data = attDoc.data();
+      if (data[id] !== undefined) {
+        const cleaned = {...data};
+        delete cleaned[id];
+        batch2.set(attDoc.ref, cleaned);
+        hasChanges = true;
+      }
+    }
+    if (hasChanges) await batch2.commit();
+  } catch(e) { /* non-critical — student already deleted */ }
   setSyncStatus("ok");
 }
 
@@ -1245,7 +1288,7 @@ function renderAttendance(){
   const dOpts=Array.from({length:maxDay},(_,i)=>`<option value="${i+1}"${d===i+1?" selected":""}>${i+1}</option>`).join("");
 
   // Day of week for selected date
-  const selDt=new Date(year,month,d);
+  const selDt=new Date(year,month,d); // local date constructor — timezone safe
   const dowLabel=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][selDt.getDay()];
   const isSunday=selDt.getDay()===0;
 
@@ -1279,7 +1322,6 @@ function renderAttendance(){
     return`<div class="att-mobile-card">
   <div class="att-mobile-header" data-action="toggle-expand" data-sid="${s.id}">
     <span class="att-mobile-sl">${idx+1}</span>
-    <span class="att-mobile-adm">${s.adm}</span>
     <span class="att-mobile-name">${s.name}</span>
     <span class="att-mobile-status">${chip}</span>
     <span class="att-mobile-expand" id="exp-arrow-${s.id}">▾</span>
@@ -1504,7 +1546,7 @@ function renderAttBook() {
     let poss=0, pres=0;
     const cells = days.map(d => {
       const dk = `${year}-${pad(month+1)}-${pad(d)}`;
-      const dt = new Date(year, month, d);
+      const dt = new Date(year, month, d); // local date - safe
       const isSun = dt.getDay()===0;
       const isHol = !!S.holidays[dk];
       if (isSun) return `<td class="cell-sun" title="Sunday">-</td>`;
@@ -1689,8 +1731,8 @@ async function generateParentLink(mode) {
 async function pushParentLinkData(token, batchId, dk, inst, bname, mode) {
   const students = S.students.filter(s=>s.batchId===batchId);
   const isP = v => v==="P"||v==="Pe";
-  const dt = new Date(dk); 
-  const dateObj = new Date(dk + 'T00:00:00');
+  const dt = new Date(dk+'T00:00:00'); 
+  const dateObj = new Date(dk + 'T00:00:00'); // force local time to avoid UTC timezone shift
   const dowFull = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dateObj.getDay()];
   const [y,m,d] = dk.split('-');
   const dateLabel = `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y} (${dowFull})`;
@@ -2121,7 +2163,7 @@ function printAttBook() {
 
   // Day header: sun=red, hol=orange, sat=light
   function dayTh(d){
-    const dt=new Date(year,month,d); const dow=dt.getDay();
+    const dt=new Date(year,month,d); const dow=dt.getDay(); // new Date(y,m,d) uses local time — correct
     const isSun=dow===0; const isHol=!!S.holidays[dk(d)];
     const dn=["Su","Mo","Tu","We","Th","Fr","Sa"][dow];
     const bg=isSun?"#ffd6d6":isHol?"#ffd9b3":dow===6?"#fffbe6":"";
@@ -2626,13 +2668,19 @@ async function handleClick(e){
     const nm=document.getElementById("m-sname").value.trim().toUpperCase();
     const bid=document.getElementById("m-sbatch").value;
     if(!nm||!bid){toast("Name and batch required","error");return;}
+    // Check duplicate admission number within same batch
+    const editingId = btn.dataset.id||"";
+    if(adm){
+      const dup = S.students.find(s=>s.adm===adm && s.batchId===bid && s.id!==editingId);
+      if(dup){ toast("Admission number "+adm+" already exists in this batch ("+dup.name+")","error"); return; }
+    }
     setLoading(true);
     try{
-      const id=btn.dataset.id||uid();
+      const id=editingId||uid();
       const student={id,adm,name:nm,batchId:bid};
       await saveStudentFS(student);
-      if(!btn.dataset.id) S.students.push(student);
-      else{const s=S.students.find(x=>x.id===btn.dataset.id);if(s){s.adm=adm;s.name=nm;s.batchId=bid;}}
+      if(!editingId) S.students.push(student);
+      else{const s=S.students.find(x=>x.id===editingId);if(s){s.adm=adm;s.name=nm;s.batchId=bid;}}
       S.students.sort((a,b)=>a.name.localeCompare(b.name));
       closeModal();refreshPage();toast("Student saved");
     }catch(e){toast(e.message,"error");}
