@@ -392,6 +392,10 @@ const attRef       = (dk) => doc(db, userPath(), "attendance", dk);
 const attColRef    = () => collection(db, userPath(), "attendance");
 const holidaysRef  = () => collection(db, userPath(), "holidays");
 const holidayRef   = (dk) => doc(db, userPath(), "holidays", dk);
+const parentLinkRef = () => doc(db, userPath(), "_meta", "parentlink");
+// Parent view data stored in public top-level collection
+const pubLinkRef = (token) => doc(db, "parentlinks", token);
+const pubLinkCol = () => collection(db, "parentlinks");
 
 // ============================================================
 // PIN HASH (SHA-256)
@@ -640,13 +644,103 @@ function showModal(html){
 }
 function closeModal(){ document.getElementById("modal-slot").innerHTML=""; }
 
+
+// =====================================================
+// PARENT VIEW — public read-only page
+// =====================================================
+async function checkParentView() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('view');
+  if (!token) return false;
+  const root = document.getElementById("root");
+  root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9"><div style="text-align:center;padding:40px"><div class=\"spinner\"></div><p style=\"margin-top:12px;color:#666;font-size:14px\">Loading attendance...</p></div></div>';
+  try {
+    const snap = await getDoc(pubLinkRef(token));
+    if (!snap.exists() || !snap.data().active) { root.innerHTML = renderExpiredLink(); return true; }
+    renderParentView(snap.data());
+    setInterval(async () => {
+      try {
+        const s2 = await getDoc(pubLinkRef(token));
+        if (s2.exists() && s2.data().active) renderParentView(s2.data());
+        else root.innerHTML = renderExpiredLink();
+      } catch(e) {}
+    }, 60000);
+  } catch(e) {
+    root.innerHTML = '<div style=\"text-align:center;padding:60px;font-family:sans-serif\"><div style=\"font-size:36px\">⚠️</div><h2>Unable to load</h2><p style=\"color:#666\">' + e.message + '</p></div>';
+  }
+  return true;
+}
+
+function renderExpiredLink() {
+  return '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;font-family:sans-serif"><div style="text-align:center;padding:40px;max-width:340px"><div style="font-size:48px;margin-bottom:16px">🔗</div><h2 style="font-size:20px;font-weight:700;margin-bottom:8px">Link Expired</h2><p style="color:#666;font-size:14px;line-height:1.6">This attendance link is no longer active. The instructor may have generated a new link.</p></div></div>';
+}
+
+function renderParentView(data) {
+  const root = document.getElementById("root");
+  const {inst, bname, dateLabel, stats, list, mode, updatedAt} = data;
+  const updated = updatedAt ? new Date(updatedAt).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}) : "";
+  const statusColor = {P:"#16a34a",A:"#dc2626",Pe:"#7c3aed",CL:"#1d4ed8",ML:"#b45309",PA:"#d97706",AP:"#d97706",""  :"#999"};
+  const statusEmoji = {P:"✅",A:"❌",Pe:"🔵",CL:"🟡",ML:"🟠",PA:"🕐",AP:"🕐","":"⬜"};
+  const statusLabel = {P:"Present",A:"Absent",Pe:"Permission",CL:"Casual Leave",ML:"Medical Leave",PA:"AN Absent",AP:"FN Absent","":"Not marked"};
+
+  const sc = (code, txt) => '<span style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:20px;padding:3px 10px;font-size:12px;color:' + (statusColor[code]||"#666") + '">' + txt + '</span>';
+
+  let listHTML = "";
+  if (mode === "absent") {
+    const notPresent = list.filter(s=>s.statusCode!=="P");
+    if (notPresent.length === 0) {
+      listHTML = '<div style="text-align:center;padding:20px;color:#16a34a;font-size:14px;font-weight:600">🎉 All students present today!</div>';
+    } else {
+      listHTML = notPresent.map(s=>'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0"><span style="font-size:18px">' + (statusEmoji[s.statusCode]||"⬜") + '</span><div style="flex:1"><div style="font-weight:600;font-size:13px">' + s.name + '</div><div style="font-size:11px;color:#6b7280">Adm No: ' + s.adm + '</div></div><span style="font-size:11px;font-weight:600;color:' + (statusColor[s.statusCode]||"#999") + '">' + (statusLabel[s.statusCode]||"") + '</span></div>').join("");
+    }
+  } else {
+    listHTML = list.map(s=>'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0"><span style="font-size:16px">' + (statusEmoji[s.statusCode]||"⬜") + '</span><div style="flex:1"><div style="font-weight:500;font-size:13px">' + s.name + '</div><div style="font-size:11px;color:#6b7280">Adm: ' + s.adm + '</div></div><span style="font-size:11px;font-weight:600;color:' + (statusColor[s.statusCode]||"#999") + '">' + (statusLabel[s.statusCode]||"–") + '</span></div>').join("");
+  }
+
+  const extraBadges = [
+    stats.permission ? "🔵 Permission: " + stats.permission : "",
+    stats.halfDay    ? "🕐 Half day: " + stats.halfDay : "",
+    stats.cl         ? "🟡 CL: " + stats.cl : "",
+    stats.ml         ? "🟠 ML: " + stats.ml : ""
+  ].filter(Boolean).map(t=>'<span style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:20px;padding:3px 10px;font-size:12px;color:#555">' + t + '</span>').join("");
+
+  root.innerHTML =
+    '<div style="max-width:480px;margin:0 auto;padding:0 0 40px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">' +
+    '<div style="background:#1e40af;color:#fff;padding:20px 16px 16px">' +
+      '<div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Attendance Report</div>' +
+      '<div style="font-size:18px;font-weight:700;margin-bottom:2px">' + inst + '</div>' +
+      '<div style="font-size:14px;opacity:.9">' + bname + '</div>' +
+      '<div style="font-size:12px;opacity:.75;margin-top:4px">📅 ' + dateLabel + '</div>' +
+    '</div>' +
+    '<div style="padding:16px">' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:0 0 14px">' +
+        '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:700;color:#16a34a">' + stats.present + '</div><div style="font-size:11px;color:#166534">Present</div></div>' +
+        '<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:700;color:#dc2626">' + stats.absent + '</div><div style="font-size:11px;color:#991b1b">Absent</div></div>' +
+        '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:700;color:#374151">' + stats.total + '</div><div style="font-size:11px;color:#6b7280">Total</div></div>' +
+      '</div>' +
+      (extraBadges ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">' + extraBadges + '</div>' : '') +
+      '<div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:8px">' + (mode==="absent"?"Students not fully present today":"All students attendance") + '</div>' +
+      '<div>' + listHTML + '</div>' +
+    '</div>' +
+    '<div style="text-align:center;padding:16px;font-size:11px;color:#9ca3af;border-top:1px solid #f0f0f0">' +
+      '<div>⟳ Auto-refreshes every 60 seconds</div>' +
+      (updated ? '<div style="margin-top:4px">Last updated: ' + updated + '</div>' : '') +
+      '<div style="margin-top:4px">ITI Attendance System</div>' +
+    '</div>' +
+    '</div>';
+}
+
 // ============================================================
 // AUTH STATE
 // ============================================================
-onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    S.user = user;
-    setLoading(true,"Loading your data...");
+// Check if this is a parent view request first
+checkParentView().then(isParentView => {
+  if (isParentView) return; // Don't init auth flow for parent view
+
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      S.user = user;
+      setLoading(true,"Loading your data...");
     try {
       S.profile = await loadProfile();
       if (!S.profile) {
@@ -669,12 +763,13 @@ onAuthStateChanged(auth, async (user) => {
       renderLogin();
     }
   } else {
-    S.user = null;
-    S.profile = null;
-    S.isUnlocked = false;
-    renderLogin();
-  }
-});
+      S.user = null;
+      S.profile = null;
+      S.isUnlocked = false;
+      renderLogin();
+    }
+  }); // end onAuthStateChanged
+}); // end checkParentView
 
 // ============================================================
 // RENDER ROOT
@@ -1225,6 +1320,7 @@ function renderAttendance(){
       <button class="btn btn-danger btn-sm" data-action="mark-all-absent">All Absent</button>
       <button class="btn btn-sm" style="background:#f3e8ff;border:1px solid #c4b5fd;color:#7c3aed" data-action="mark-all-permission">All Permission</button>
         <button class="btn btn-sm" style="background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1" data-action="share-attendance">📤 Share</button>
+        <button class="btn btn-sm" style="background:#fef9c3;border:1px solid #fde047;color:#854d0e" data-action="generate-parent-link">🔗 Parent Link</button>
     </div>
   </div>
 </div>
@@ -1548,6 +1644,174 @@ function renderSettings(){
 // MODALS
 // ============================================================
 // ── PIN verification for destructive actions ──
+// ── PARENT LINK FUNCTIONS ──
+function genToken() {
+  const arr = new Uint8Array(15);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b=>b.toString(36).padStart(2,'0')).join('').substring(0,24);
+}
+
+async function generateParentLink(mode) {
+  const {batchId, year, month, day} = S.attState;
+  const maxDay = daysInMonth(year, month);
+  const d = Math.min(day, maxDay);
+  const dk = `${year}-${pad(month+1)}-${pad(d)}`;
+  const batch = S.batches.find(b=>b.id===batchId);
+  const inst = S.profile?.institute || "Govt ITI Dhanuvachapuram";
+  const bname = batch ? `${batch.trade} ${batch.name}` : "";
+  const token = genToken();
+
+  setLoading(true, "Generating link...");
+  try {
+    // Save token reference in instructor's private doc
+    await setDoc(parentLinkRef(), {
+      token, batchId, mode, date: dk,
+      inst, bname,
+      instructorName: S.profile?.name||"",
+      created: Date.now()
+    });
+
+    // Push current attendance snapshot to public collection
+    await pushParentLinkData(token, batchId, dk, inst, bname, mode);
+
+    // Build the shareable URL
+    const baseUrl = window.location.href.split('?')[0].split('#')[0];
+    const link = `${baseUrl}?view=${token}`;
+
+    setLoading(false);
+    showParentLinkModal(link, token, mode, bname, dk);
+  } catch(e) {
+    setLoading(false);
+    toast("Error generating link: " + e.message, "error");
+  }
+}
+
+async function pushParentLinkData(token, batchId, dk, inst, bname, mode) {
+  const students = S.students.filter(s=>s.batchId===batchId);
+  const isP = v => v==="P"||v==="Pe";
+  const dt = new Date(dk); 
+  const dateObj = new Date(dk + 'T00:00:00');
+  const dowFull = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dateObj.getDay()];
+  const [y,m,d] = dk.split('-');
+  const dateLabel = `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y} (${dowFull})`;
+
+  // Build student list
+  const list = students.map(s => {
+    const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
+    const fp=isP(r.fn), ap=isP(r.an);
+    let status, statusCode;
+    if(r.fn==="CL"||r.an==="CL"){status="Casual Leave";statusCode="CL";}
+    else if(r.fn==="ML"||r.an==="ML"){status="Medical Leave";statusCode="ML";}
+    else if((r.fn==="Pe"||r.an==="Pe")&&fp&&ap){status="Permission";statusCode="Pe";}
+    else if(fp&&ap){status="Present";statusCode="P";}
+    else if(fp&&!ap){status="AN Absent";statusCode="PA";}
+    else if(!fp&&ap){status="FN Absent";statusCode="AP";}
+    else if(r.fn==="A"||r.an==="A"){status="Absent";statusCode="A";}
+    else{status="Not marked";statusCode="";}
+    return {name:s.name, adm:s.adm, status, statusCode};
+  });
+
+  const stats = {
+    present: list.filter(s=>s.statusCode==="P").length,
+    absent:  list.filter(s=>s.statusCode==="A").length,
+    permission: list.filter(s=>s.statusCode==="Pe").length,
+    cl: list.filter(s=>s.statusCode==="CL").length,
+    ml: list.filter(s=>s.statusCode==="ML").length,
+    halfDay: list.filter(s=>s.statusCode==="PA"||s.statusCode==="AP").length,
+    total: students.length
+  };
+
+  // Store in public parentlinks collection
+  await setDoc(pubLinkRef(token), {
+    token, inst, bname, dateLabel, dk,
+    mode, stats, list,
+    updatedAt: Date.now(),
+    active: true
+  });
+}
+
+async function refreshParentLinkData() {
+  // Called when instructor marks attendance - updates the live data
+  try {
+    const snap = await getDoc(parentLinkRef());
+    if (!snap.exists()) return;
+    const pl = snap.data();
+    const todayDk = `${S.attState.year}-${pad(S.attState.month+1)}-${pad(Math.min(S.attState.day, daysInMonth(S.attState.year,S.attState.month)))}`;
+    // Only refresh if the link is for today's date
+    if (pl.date === todayDk && pl.token) {
+      await pushParentLinkData(pl.token, pl.batchId, pl.date, pl.inst, pl.bname, pl.mode);
+    }
+  } catch(e) { /* silent */ }
+}
+
+function showParentLinkModal(link, token, mode, bname, dk) {
+  showModal(`
+<div class="modal-header">
+  <h3>🔗 Parent Link Generated</h3>
+  <button class="btn-icon" onclick="closeModal()">✕</button>
+</div>
+<div class="modal-body">
+  <div style="background:var(--success-bg);border:1px solid var(--success-border);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:12px">
+    <div class="fw500 text-success">✅ Link active</div>
+    <div class="text-muted" style="font-size:11px;margin-top:2px">${bname} — ${mode==="absent"?"Absent students only":"All students"}</div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Share this link with parents</label>
+    <div class="flex" style="gap:6px">
+      <input id="parent-link-input" value="${link}" readonly style="font-size:11px;background:var(--surface2)"/>
+      <button class="btn btn-secondary btn-sm" style="flex-shrink:0" onclick="
+        navigator.clipboard?.writeText('${link}').then(()=>toast('Link copied!'));
+      ">Copy</button>
+    </div>
+  </div>
+  <p class="text-xs text-muted mb12">Parents can open this link on any phone or browser — no login needed. The link shows live attendance and auto-refreshes every minute.</p>
+  <div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:var(--radius);padding:8px 10px;font-size:11px;color:var(--warn)">
+    ⚠️ Generating a new link will expire this one. Share it before generating another.
+  </div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+  <button class="btn btn-primary" onclick="
+    if(navigator.share){navigator.share({title:'Attendance Link',url:'${link}'}).catch(()=>{});}
+    else{navigator.clipboard?.writeText('${link}').then(()=>toast('Link copied — paste in WhatsApp'));}
+  ">📤 Share Link</button>
+</div>`);
+}
+
+function parentLinkModal() {
+  showModal(`
+<div class="modal-header">
+  <h3>🔗 Generate Parent Link</h3>
+  <button class="btn-icon" onclick="closeModal()">✕</button>
+</div>
+<div class="modal-body">
+  <p class="text-sm text-secondary mb16">Parents can view today's live attendance using this link — no login needed. Choose what information to show:</p>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:var(--radius)">
+      <input type="radio" name="pl-mode" value="absent" checked style="width:auto;margin-top:2px"/>
+      <div>
+        <div class="fw500" style="font-size:13px">Absent students only</div>
+        <div class="text-muted" style="font-size:11px">Shows summary + list of absent, CL, ML, permission students</div>
+      </div>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:var(--radius)">
+      <input type="radio" name="pl-mode" value="all" style="width:auto;margin-top:2px"/>
+      <div>
+        <div class="fw500" style="font-size:13px">All students with status</div>
+        <div class="text-muted" style="font-size:11px">Shows complete attendance list with each student's status</div>
+      </div>
+    </label>
+  </div>
+  <div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:var(--radius);padding:8px 10px;font-size:11px;color:var(--warn);margin-top:12px">
+    ⚠️ Any previously generated link will expire when you create a new one.
+  </div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+  <button class="btn btn-primary" data-action="confirm-parent-link">Generate Link</button>
+</div>`);
+}
+
 function shareAttendanceModal() {
   const {batchId, year, month, day} = S.attState;
   const maxDay = daysInMonth(year, month);
@@ -2407,6 +2671,16 @@ async function handleClick(e){
     saveAttendanceFS(dk,sid,fn,an).catch(e=>toast("Save error: "+e.message,"error"));
     return;
   }
+  if(a==="generate-parent-link"){
+    parentLinkModal();
+    return;
+  }
+  if(a==="confirm-parent-link"){
+    const mode=document.querySelector("input[name='pl-mode']:checked")?.value||"absent";
+    closeModal();
+    generateParentLink(mode);
+    return;
+  }
   if(a==="share-attendance"){
     shareAttendanceModal();
     return;
@@ -2453,7 +2727,7 @@ async function handleClick(e){
     if(!S.attendance[dk])S.attendance[dk]={};
     S.attendance[dk][sid]={fn:val,an:val};
     closeModal();refreshPage();
-    saveAttendanceFS(dk,sid,val,val).catch(e=>toast("Save error: "+e.message,"error"));
+    saveAttendanceFS(dk,sid,val,val).then(()=>refreshParentLinkData()).catch(()=>{});
     return;
   }
   if(a==="mark-all-present"||a==="mark-all-absent"||a==="mark-all-permission"){
@@ -2465,7 +2739,7 @@ async function handleClick(e){
     if(!S.attendance[dk])S.attendance[dk]={};
     students.forEach(s=>S.attendance[dk][s.id]={fn:v,an:v});
     refreshPage();
-    markAllFS(dk,students.map(s=>s.id),v,v).catch(e=>toast("Save error: "+e.message,"error"));
+    markAllFS(dk,students.map(s=>s.id),v,v).then(()=>refreshParentLinkData()).catch(()=>{});
     return;
   }
 
