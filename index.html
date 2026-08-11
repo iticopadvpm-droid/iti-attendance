@@ -59,19 +59,63 @@ tbody tr:hover{background:var(--surface2)}
 .app{display:flex;height:100vh;overflow:hidden}
 .sidebar{width:210px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:width .25s}
 .sidebar.collapsed{width:48px}
-.sidebar.collapsed .sidebar-logo .title,.sidebar.collapsed .sidebar-logo .inst,.sidebar.collapsed .sidebar-logo .user{display:none}
-.sidebar.collapsed nav .nav-item span:last-child{display:none}
-.sidebar.collapsed nav .nav-item{justify-content:center;padding:10px 0}
-.sidebar.collapsed .sidebar-footer .btn{font-size:0;padding:8px}
-.sidebar-toggle{display:none;background:none;border:none;font-size:22px;cursor:pointer;padding:2px 6px;color:var(--text2);line-height:1;margin-right:4px;border-radius:6px}
+.sidebar.collapsed:not(.mobile-open) .sidebar-logo .title,
+.sidebar.collapsed:not(.mobile-open) .sidebar-logo .inst,
+.sidebar.collapsed:not(.mobile-open) .sidebar-logo .user{display:none}
+.sidebar.collapsed:not(.mobile-open) nav .nav-item span:last-child{display:none}
+.sidebar.collapsed:not(.mobile-open) nav .nav-item{justify-content:center;padding:10px 0}
+.sidebar.collapsed:not(.mobile-open) .sidebar-footer .btn{font-size:0;padding:8px}
+.sidebar-toggle{display:none;background:none;border:none;font-size:24px;cursor:pointer;padding:2px 8px;color:var(--text2);line-height:1;margin-right:6px;border-radius:6px;flex-shrink:0}
 .sidebar-toggle:hover{background:var(--surface2)}
 @media(max-width:700px){
   .sidebar-toggle{display:block!important}
-  .sidebar{width:0!important;overflow:hidden;position:fixed;height:100vh;z-index:50;left:0;top:0}
-  .sidebar.mobile-open{width:220px!important;box-shadow:4px 0 24px rgba(0,0,0,.2)}
-  .main{margin-left:0!important;width:100%}
-  .topbar{padding-left:8px}
-  .mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:49}
+  .app{position:relative}
+  .sidebar{
+    width:0!important;
+    min-width:0!important;
+    overflow:hidden;
+    position:fixed;
+    height:100vh;
+    z-index:50;
+    left:0;
+    top:0;
+    flex-shrink:0;
+    transition:width .25s,min-width .25s;
+  }
+  .sidebar.mobile-open{
+    width:240px!important;
+    min-width:240px!important;
+    box-shadow:4px 0 24px rgba(0,0,0,.25);
+  }
+  .sidebar.mobile-open .sidebar-logo,
+  .sidebar.mobile-open nav,
+  .sidebar.mobile-open .sidebar-footer{
+    display:flex;
+    flex-direction:column;
+  }
+  .sidebar.mobile-open .nav-item{
+    display:flex!important;
+    align-items:center;
+    gap:9px;
+    padding:11px 14px;
+    width:100%;
+    white-space:nowrap;
+  }
+  .sidebar.mobile-open .nav-item span{
+    display:inline!important;
+    font-size:14px;
+  }
+  .sidebar.mobile-open .sidebar-logo .title,
+  .sidebar.mobile-open .sidebar-logo .inst,
+  .sidebar.mobile-open .sidebar-logo .user{
+    display:block!important;
+  }
+  .sidebar.mobile-open .sidebar-footer .btn{
+    font-size:13px!important;
+    padding:8px 16px!important;
+  }
+  .main{margin-left:0!important;width:100%;min-width:0}
+  .mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:49}
   .mobile-overlay.show{display:block}
   .grid4{grid-template-columns:1fr 1fr!important}
   .content{padding:12px}
