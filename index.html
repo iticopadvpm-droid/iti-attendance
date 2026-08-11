@@ -138,6 +138,34 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 .sync-dot.syncing{background:var(--warn);animation:pulse 1s infinite}
 .sync-dot.error{background:var(--danger)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* Mobile Attendance Marking */
+.att-mobile-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius2);margin-bottom:8px;overflow:hidden;box-shadow:var(--shadow)}
+.att-mobile-header{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);cursor:pointer;user-select:none}
+.att-mobile-sl{font-size:11px;color:var(--text3);min-width:20px;text-align:center}
+.att-mobile-adm{font-size:11px;color:var(--text3);min-width:36px}
+.att-mobile-name{flex:1;font-weight:600;font-size:14px}
+.att-mobile-status{display:flex;gap:4px;align-items:center}
+.att-mobile-expand{color:var(--text3);font-size:12px;padding:4px;transition:transform .2s}
+.att-mobile-expand.open{transform:rotate(180deg)}
+.att-quick-btns{display:flex;gap:6px;flex-wrap:wrap}
+.att-quick-btn{padding:6px 12px;border-radius:6px;border:1px solid var(--border2);font-size:13px;font-weight:600;cursor:pointer;transition:all .1s;background:var(--surface2);color:var(--text3)}
+.att-quick-btn:active{transform:scale(.95)}
+.att-quick-btn.P{background:#dcfce7;color:#15803d;border-color:#86efac}
+.att-quick-btn.A{background:#fee2e2;color:#dc2626;border-color:#fca5a5}
+.att-quick-btn.Pe{background:#f3e8ff;color:#7c3aed;border-color:#c4b5fd}
+.att-quick-btn.CL{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
+.att-quick-btn.ML{background:#fef3c7;color:#b45309;border-color:#fcd34d}
+.att-expand-body{padding:10px 12px;background:var(--surface2);border-top:1px solid var(--border);display:none}
+.att-expand-body.open{display:block}
+.att-sess-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.att-sess-row:last-child{margin-bottom:0}
+.att-sess-lbl{font-size:11px;font-weight:700;color:var(--text2);width:24px}
+.att-status-chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;background:var(--surface);border:1px solid var(--border)}
+.att-status-chip.P{background:#dcfce7;color:#15803d;border-color:#86efac}
+.att-status-chip.A{background:#fee2e2;color:#dc2626;border-color:#fca5a5}
+.att-status-chip.Pe{background:#f3e8ff;color:#7c3aed;border-color:#c4b5fd}
+.att-status-chip.CL{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
+.att-status-chip.ML{background:#fef3c7;color:#b45309;border-color:#fcd34d}
 /* Attendance Book */
 .ab-wrap{overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:var(--radius2)}
 .ab-table{border-collapse:collapse;font-size:11px;min-width:100%}
@@ -1053,53 +1081,99 @@ function renderAttendance(){
   const bOpts=S.batches.map(b=>`<option value="${b.id}"${batchId===b.id?" selected":""}>${b.name}</option>`).join("");
   const mOpts=MONTHS.map((m,i)=>`<option value="${i}"${month===i?" selected":""}>${m}</option>`).join("");
   const dOpts=Array.from({length:maxDay},(_,i)=>`<option value="${i+1}"${d===i+1?" selected":""}>${i+1}</option>`).join("");
-  let fnP=0,anP=0,full=0;
-  const rows=students.map((s,idx)=>{
+
+  // Day of week for selected date
+  const selDt=new Date(year,month,d);
+  const dowLabel=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][selDt.getDay()];
+  const isSunday=selDt.getDay()===0;
+
+  let fnP=0,anP=0,full=0,unmarked=0;
+
+  const cards=students.map((s,idx)=>{
     const att=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
-    if(att.fn==="P"||att.fn==="Pe")fnP++; if(att.an==="P"||att.an==="Pe")anP++; if((att.fn==="P"||att.fn==="Pe")&&(att.an==="P"||att.an==="Pe"))full++;
-    const fnBtns=SESS.map(v=>`<button class="sess-btn ${att.fn===v?v:""}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="fn" data-val="${v}">${v}</button>`).join("");
-    const anBtns=SESS.map(v=>`<button class="sess-btn ${att.an===v?v:""}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="an" data-val="${v}">${v}</button>`).join("");
-    return`<tr>
-      <td style="color:var(--text3);font-size:12px">${idx+1}</td>
-      <td style="font-size:12px;color:var(--text3)">${s.adm}</td>
-      <td class="fw500">${s.name}</td>
-      <td><div class="sess-group"><span class="sess-label">FN</span>${fnBtns}</div></td>
-      <td><div class="sess-group"><span class="sess-label">AN</span>${anBtns}</div></td>
-      <td><button class="btn btn-secondary btn-sm" data-action="mark-both" data-sid="${s.id}" data-dk="${dk}" data-fn="${att.fn}" data-an="${att.an}">Both</button></td>
-    </tr>`;
+    const fn=att.fn||"", an=att.an||"";
+    const isPresent=(v)=>v==="P"||v==="Pe";
+    if(isPresent(fn))fnP++; if(isPresent(an))anP++;
+    if(isPresent(fn)&&isPresent(an))full++;
+    if(!fn&&!an)unmarked++;
+
+    // Determine combined status for display chip
+    let chip="";
+    if(fn===an&&fn!=="") chip=`<span class="att-status-chip ${fn}">${fn}</span>`;
+    else if(fn&&an) chip=`<span class="att-status-chip ${fn}">${fn}</span><span style="font-size:10px;color:var(--text3)">+</span><span class="att-status-chip ${an}">${an}</span>`;
+    else if(fn||an) chip=`<span class="att-status-chip ${fn||an}">${fn||an}</span><span style="font-size:10px;color:var(--text3);margin-left:2px">½</span>`;
+    else chip=`<span style="font-size:11px;color:var(--text3);font-style:italic">not marked</span>`;
+
+    // Quick buttons (marks both FN+AN)
+    const quickBtns=SESS.map(v=>{
+      const active=fn===v&&an===v;
+      return`<button class="att-quick-btn ${active?v:""}" data-action="mark-both-val" data-sid="${s.id}" data-dk="${dk}" data-val="${v}">${v}</button>`;
+    }).join("");
+
+    // Expanded FN/AN buttons
+    const fnBtns=SESS.map(v=>`<button class="att-quick-btn ${fn===v?v:""}" style="padding:5px 9px;font-size:12px" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="fn" data-val="${v}">${v}</button>`).join("");
+    const anBtns=SESS.map(v=>`<button class="att-quick-btn ${an===v?v:""}" style="padding:5px 9px;font-size:12px" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="an" data-val="${v}">${v}</button>`).join("");
+
+    return`<div class="att-mobile-card">
+  <div class="att-mobile-header" data-action="toggle-expand" data-sid="${s.id}">
+    <span class="att-mobile-sl">${idx+1}</span>
+    <span class="att-mobile-adm">${s.adm}</span>
+    <span class="att-mobile-name">${s.name}</span>
+    <span class="att-mobile-status">${chip}</span>
+    <span class="att-mobile-expand" id="exp-arrow-${s.id}">▾</span>
+  </div>
+  <div style="padding:8px 12px 10px;background:var(--surface);border-top:1px solid var(--border)">
+    <div class="att-quick-btns">${quickBtns}</div>
+  </div>
+  <div class="att-expand-body" id="exp-body-${s.id}">
+    <div class="att-sess-row">
+      <span class="att-sess-lbl">FN</span>
+      <div class="att-quick-btns">${fnBtns}</div>
+    </div>
+    <div class="att-sess-row">
+      <span class="att-sess-lbl">AN</span>
+      <div class="att-quick-btns">${anBtns}</div>
+    </div>
+  </div>
+</div>`;
   }).join("");
+
   return`
-<div class="card mb16">
-  <div class="card-body">
-    <div class="flex flex-wrap" style="gap:10px;align-items:flex-end">
-      <div><label class="form-label">Batch</label><select style="width:200px" id="att-batch">${bOpts}</select></div>
-      <div><label class="form-label">Month</label><select style="width:130px" id="att-month">${mOpts}</select></div>
-      <div><label class="form-label">Day</label><select style="width:75px" id="att-day">${dOpts}</select></div>
-      <div><label class="form-label">Year</label><input type="number" id="att-year" value="${year}" style="width:85px"/></div>
-      <div class="flex" style="gap:6px;margin-top:18px">
-        <button class="btn btn-success btn-sm" data-action="mark-all-present">All Present</button>
-        <button class="btn btn-danger btn-sm" data-action="mark-all-absent">All Absent</button>
-        <button class="btn btn-sm" style="background:#f3e8ff;border:1px solid #c4b5fd;color:#7c3aed" data-action="mark-all-permission">All Permission</button>
+<div class="card mb12">
+  <div class="card-body" style="padding:12px 14px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div><label class="form-label">Batch</label><select id="att-batch">${bOpts}</select></div>
+      <div><label class="form-label">Month</label><select id="att-month">${mOpts}</select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+      <div><label class="form-label">Day</label><select id="att-day">${dOpts}</select></div>
+      <div><label class="form-label">Year</label><input type="number" id="att-year" value="${year}"/></div>
+      <div style="padding-top:18px">
+        <span style="font-size:12px;font-weight:600;color:${isSunday?"var(--danger)":"var(--text2)"}">${dowLabel}</span>
+        ${isSunday?`<div style="font-size:10px;color:var(--danger)">Sunday</div>`:""}
       </div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-success btn-sm" data-action="mark-all-present">All Present</button>
+      <button class="btn btn-danger btn-sm" data-action="mark-all-absent">All Absent</button>
+      <button class="btn btn-sm" style="background:#f3e8ff;border:1px solid #c4b5fd;color:#7c3aed" data-action="mark-all-permission">All Permission</button>
     </div>
   </div>
 </div>
+
 ${students.length?`
-<div class="card p0">
-  <div style="overflow-x:auto">
-  <table class="att-table">
-    <thead><tr><th>#</th><th>Adm</th><th>Name</th><th>Forenoon (FN)</th><th>Afternoon (AN)</th><th>Both</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table></div>
-  <div class="att-footer">
-    <span>FN Present: <strong>${fnP}</strong></span>
-    <span>AN Present: <strong>${anP}</strong></span>
-    <span>Full day: <strong>${full}</strong></span>
-    <span style="color:var(--danger)">FN Absent: <strong>${students.length-fnP}</strong></span>
-    <span style="color:var(--danger)">AN Absent: <strong>${students.length-anP}</strong></span>
-    <span class="text-muted" style="margin-left:auto;font-size:11px">${dk}</span>
-  </div>
-</div>`:`<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No students in this batch. <button class="btn-icon text-accent" data-action="go-students">Add students →</button></div>`}`;
+<div style="margin-bottom:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius2);font-size:12px;display:flex;gap:14px;flex-wrap:wrap">
+  <span>Present: <strong style="color:var(--success)">${full}</strong></span>
+  <span>FN✓: <strong>${fnP}</strong></span>
+  <span>AN✓: <strong>${anP}</strong></span>
+  <span>Absent: <strong style="color:var(--danger)">${students.length-full}</strong></span>
+  <span>Unmarked: <strong style="color:var(--warn)">${unmarked}</strong></span>
+  <span style="margin-left:auto;color:var(--text3);font-size:11px">${dk}</span>
+</div>
+<div style="font-size:11px;color:var(--text3);margin-bottom:8px;padding:0 2px">
+  Tap a button to mark full day. Tap ▾ to mark FN/AN separately.
+</div>
+${cards}`:`<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No students in this batch. <button class="btn-icon text-accent" data-action="go-students">Add students →</button></div>`}`;
 }
 
 // ============================================================
@@ -1460,7 +1534,7 @@ function printAttBook() {
   const printDate = document.getElementById("ab-pd-date")?.checked ?? S.printDetails.printDate;
   const instrLabel = `${name} (${pos}, ${trade})`;
   const now = new Date().toLocaleDateString("en-IN");
-  const dateStr = printDate ? `Date: ${now}` : "Date:";
+  const dateStr = printDate ? now : "";
   const inst = S.profile?.institute || "Govt ITI Dhanuvachapuram";
   const batch = S.batches.find(b=>b.id===batchId);
   const bname = batch?.name||""; const btrade = batch?.trade||""; const acYear = batch?.year||"";
@@ -1468,135 +1542,283 @@ function printAttBook() {
   const totalDays = daysInMonth(year, month);
   const days = Array.from({length:totalDays},(_,i)=>i+1);
   const monthLabel = `${MONTHS[month]} ${year}`;
-  const half1 = days.filter(d=>d<=16);
-  const half2 = days.filter(d=>d>16);
 
-  function buildPageHTML(halfDays, pageNum) {
-    const isPage1 = pageNum===1;
+  // ── helpers ──
+  const isP = v => v==="P"||v==="Pe";
+  const dk = d => `${year}-${pad(month+1)}-${pad(d)}`;
 
-    const dayHdrs = halfDays.map(d=>{
-      const dt=new Date(year,month,d); const dow=dt.getDay();
-      const dk=`${year}-${pad(month+1)}-${pad(d)}`;
-      const isSun=dow===0; const isHol=!!S.holidays[dk];
-      const dn=["Su","Mo","Tu","We","Th","Fr","Sa"][dow];
-      const cls=isSun?"sun":isHol?"hol":"";
-      return `<th class="${cls}" style="min-width:18px;font-size:8px">${d}<br><span style="font-size:7px;font-weight:400">${dn}</span></th>`;
-    }).join("");
-
-    const studentRows = students.map((s,idx)=>{
-      // Month totals
-      let poss=0, pres=0;
-      days.forEach(d=>{
-        const dk=`${year}-${pad(month+1)}-${pad(d)}`;
-        const dt=new Date(year,month,d);
-        if(dt.getDay()===0||S.holidays[dk]) return;
-        const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
-        if(r.fn==="CL"||r.fn==="ML"){poss+=1;}
-        else{if(r.fn)poss+=0.5; if(r.an)poss+=0.5;}
-        if(r.fn==="P"||r.fn==="Pe")pres+=0.5;
-        if(r.an==="P"||r.an==="Pe")pres+=0.5;
-      });
-      // Cumulative totals
-      const lastDay=`${year}-${pad(month+1)}-${pad(daysInMonth(year,month))}`;
-      let cumPoss=0, cumPres=0;
-      for(const [dk,rec] of Object.entries(S.attendance)){
-        if(dk>lastDay) continue;
-        const r=rec[s.id];
-        if(!r||(!r.fn&&!r.an)) continue;
-        if(r.fn==="CL"||r.fn==="ML"){cumPoss+=1;}
-        else{if(r.fn)cumPoss+=0.5; if(r.an)cumPoss+=0.5;}
-        if(r.fn==="P"||r.fn==="Pe")cumPres+=0.5;
-        if(r.an==="P"||r.an==="Pe")cumPres+=0.5;
-      }
-      const pct=cumPoss>0?Math.round(cumPres/cumPoss*100):0;
-      const pctStyle=pct<PCT_WARN?"color:#c00;font-weight:700":pct<PCT_WARN+5?"color:#b45309;font-weight:700":"color:#166534";
-
-      const cells = halfDays.map(d=>{
-        const dk=`${year}-${pad(month+1)}-${pad(d)}`;
-        const dt=new Date(year,month,d);
-        const isSun=dt.getDay()===0; const isHol=!!S.holidays[dk];
-        if(isSun) return `<td class="sun">-</td>`;
-        if(isHol) return `<td class="hol">H</td>`;
-        const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
-        const {mark,cls}=getPrintMark(r.fn,r.an);
-        return `<td><span class="${cls}">${mark}</span></td>`;
-      }).join("");
-
-      if(isPage1){
-        return `<tr><td class="psl">${idx+1}</td><td class="pname">${s.name}</td>${cells}</tr>`;
-      } else {
-        return `<tr>
-          <td class="psl">${idx+1}</td><td class="pname">${s.name}</td>
-          ${cells}
-          <td class="pstat">${poss}</td><td class="pstat">${pres}</td>
-          <td class="pstat">${cumPoss}</td><td class="pstat">${cumPres}</td>
-          <td class="pstat" style="${pctStyle}">${pct}%</td>
-        </tr>`;
-      }
-    }).join("");
-
-    const extraCols = isPage1 ? `` :
-      `<th class="pstat">Poss</th><th class="pstat">Pres</th>
-       <th class="pstat">Cum<br>Poss</th><th class="pstat">Cum<br>Pres</th>
-       <th class="pstat">%</th>`;
-
-    return `<div class="ab-print-page">
-  <div class="ab-print-header">
-    <h1>${inst}</h1><h2>Trade: ${btrade} — ${bname}</h2>
-    <h3>Attendance Register — ${monthLabel} | Academic Year: ${acYear}</h3>
-    <hr><div style="font-size:9px;color:#333">${instrLabel} | Page ${pageNum} of 2 | Days ${halfDays[0]}–${halfDays[halfDays.length-1]}</div>
-  </div>
-  <table class="ab-ptable"><thead><tr>
-    <th style="min-width:18px">#</th>
-    <th style="text-align:left;min-width:90px">Name</th>
-    ${dayHdrs}${extraCols}
-  </tr></thead><tbody>${studentRows}</tbody></table>
-  <div style="margin-top:6px;font-size:8px;color:#555">
-    ✗=Present &nbsp; ╱=FN present &nbsp; ╲=AN present &nbsp;
-    <span style="color:#6d28d9;font-weight:700">P</span>=Permission &nbsp;
-    A=Absent &nbsp; CL=Casual Leave &nbsp; ML=Medical Leave &nbsp; H=Holiday
-  </div>
-  <div class="ab-sign">
-    <div>${dateStr}</div>
-    <div>${name}<small>${pos}, ${trade}</small></div>
-    <div>Group Instructor<small>&nbsp;</small></div>
-    <div>Principal<small>&nbsp;</small></div>
-  </div>
-</div>`;
+  // CL/ML availed per student
+  function clCount(sid){
+    let c=0;
+    days.forEach(d=>{
+      const r=(S.attendance[dk(d)]||{})[sid]||{fn:"",an:""};
+      if(r.fn==="CL"||r.an==="CL") c++;
+    });
+    return c;
+  }
+  function mlCount(sid){
+    let c=0;
+    days.forEach(d=>{
+      const r=(S.attendance[dk(d)]||{})[sid]||{fn:"",an:""};
+      if(r.fn==="ML"||r.an==="ML") c++;
+    });
+    return c;
   }
 
-  const page1 = buildPageHTML(half1, 1);
-  const page2 = buildPageHTML(half2, 2);
-  const win = window.open("","_blank","width=800,height=700");
+  // Month poss/pres per student
+  function monthStats(sid){
+    let poss=0,pres=0;
+    days.forEach(d=>{
+      const dt=new Date(year,month,d);
+      if(dt.getDay()===0||S.holidays[dk(d)]) return;
+      const r=(S.attendance[dk(d)]||{})[sid]||{fn:"",an:""};
+      if(r.fn==="CL"||r.fn==="ML"){poss+=1;}
+      else{if(r.fn)poss+=0.5; if(r.an)poss+=0.5;}
+      if(isP(r.fn))pres+=0.5; if(isP(r.an))pres+=0.5;
+    });
+    return{poss,pres};
+  }
+
+  // Cumulative poss/pres
+  function cumStats(sid){
+    const lastDay=`${year}-${pad(month+1)}-${pad(totalDays)}`;
+    let poss=0,pres=0;
+    for(const [d,rec] of Object.entries(S.attendance)){
+      if(d>lastDay) continue;
+      const r=rec[sid]; if(!r||(!r.fn&&!r.an)) continue;
+      if(r.fn==="CL"||r.fn==="ML"){poss+=1;}
+      else{if(r.fn)poss+=0.5; if(r.an)poss+=0.5;}
+      if(isP(r.fn))pres+=0.5; if(isP(r.an))pres+=0.5;
+    }
+    return{poss,pres};
+  }
+
+  // CL eligibility (standard = 8 per year, show remaining)
+  const CL_ELIGIBLE = 8;
+
+  // Day header: sun=red, hol=orange, sat=light
+  function dayTh(d){
+    const dt=new Date(year,month,d); const dow=dt.getDay();
+    const isSun=dow===0; const isHol=!!S.holidays[dk(d)];
+    const dn=["Su","Mo","Tu","We","Th","Fr","Sa"][dow];
+    const bg=isSun?"#ffd6d6":isHol?"#ffd9b3":dow===6?"#fffbe6":"";
+    return `<th style="min-width:16px;font-size:7px;padding:2px 1px;${bg?"background:"+bg+";":""}text-align:center">${d}<br><span style="font-weight:400;font-size:6px">${dn}</span></th>`;
+  }
+
+  // Cell mark
+  function cellMark(fn,an){
+    if(fn==="CL"||an==="CL") return{t:"CL",c:"#1d4ed8"};
+    if(fn==="ML"||an==="ML") return{t:"ML",c:"#b45309"};
+    const fp=isP(fn),ap=isP(an),fpe=fn==="Pe",ape=an==="Pe";
+    const fa=fn==="A",aa=an==="A";
+    if(fp&&ap){
+      if(fpe&&ape) return{t:"P",c:"#6d28d9"};
+      if(fpe)      return{t:"P╱",c:"#6d28d9"};
+      if(ape)      return{t:"P╲",c:"#6d28d9"};
+      return{t:"✗",c:"#111"};
+    }
+    if(fp&&aa) return fpe?{t:"P╲",c:"#6d28d9"}:{t:"╲",c:"#111"};
+    if(fa&&ap) return ape?{t:"P╱",c:"#6d28d9"}:{t:"╱",c:"#111"};
+    if(fp&&!an) return fpe?{t:"P",c:"#6d28d9"}:{t:"╱",c:"#111"};
+    if(!fn&&ap) return ape?{t:"P",c:"#6d28d9"}:{t:"╲",c:"#111"};
+    if(fa||aa) return{t:"A",c:"#c00"};
+    return{t:"",c:""};
+  }
+
+  // Daily FN/AN totals
+  function dayTotal(d,sess){
+    let cnt=0;
+    students.forEach(s=>{
+      const r=(S.attendance[dk(d)]||{})[s.id]||{fn:"",an:""};
+      if(isP(r[sess])) cnt++;
+    });
+    return cnt;
+  }
+
+  // Build day headers
+  const dayHeaders = days.map(d=>dayTh(d)).join("");
+
+  // Build student rows
+  const studentRows = students.map((s,idx)=>{
+    const ms=monthStats(s.id);
+    const cs=cumStats(s.id);
+    const cl=clCount(s.id); const ml=mlCount(s.id);
+    const pct=cs.poss>0?Math.round(cs.pres/cs.poss*100):0;
+    const pctColor=pct<PCT_WARN?"#c00":pct<PCT_WARN+5?"#b45309":"#166534";
+    const clElig=Math.max(0,CL_ELIGIBLE-cl);
+
+    const cells=days.map(d=>{
+      const dt=new Date(year,month,d); const isSun=dt.getDay()===0;
+      const isHol=!!S.holidays[dk(d)];
+      const bg=isSun?"background:#fff0f0":isHol?"background:#fff3e0":"";
+      if(isSun) return `<td style="${bg};text-align:center;font-size:8px;color:#999">-</td>`;
+      if(isHol) return `<td style="${bg};text-align:center;font-size:8px;color:#e65100;font-weight:700">H</td>`;
+      const r=(S.attendance[dk(d)]||{})[s.id]||{fn:"",an:""};
+      const{t,c}=cellMark(r.fn,r.an);
+      return `<td style="text-align:center;font-size:9px;font-weight:900;color:${c}">${t}</td>`;
+    }).join("");
+
+    return `<tr style="${idx%2===1?"background:#fafafa":""}">
+      <td style="text-align:center;font-size:8px;color:#555">${idx+1}</td>
+      <td style="text-align:center;font-size:8px;color:#555">${s.adm}</td>
+      <td style="text-align:left;padding-left:3px;font-size:9px;font-weight:600;min-width:100px">${s.name}</td>
+      <td style="text-align:center;font-size:8px">${CL_ELIGIBLE}</td>
+      <td style="text-align:center;font-size:8px;color:#1d4ed8">${cl}</td>
+      <td style="text-align:center;font-size:8px;color:#b45309">${ml}</td>
+      ${cells}
+      <td style="text-align:center;font-size:9px;font-weight:700">${ms.pres}</td>
+      <td style="text-align:center;font-size:9px;font-weight:700">${cs.pres}</td>
+      <td style="text-align:center;font-size:9px;font-weight:700;color:${pctColor}">${pct}%</td>
+      <td style="min-width:40px"></td>
+    </tr>`;
+  }).join("");
+
+  // Daily totals row FN
+  const fnTotRow = `<tr style="background:#e8f5e9;border-top:2px solid #888">
+    <td colspan="6" style="text-align:right;font-size:8px;font-weight:700;padding-right:4px">Total FN</td>
+    ${days.map(d=>{
+      const dt=new Date(year,month,d); const isSun=dt.getDay()===0; const isHol=!!S.holidays[dk(d)];
+      if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
+      return `<td style="text-align:center;font-size:8px;font-weight:700">${dayTotal(d,"fn")}</td>`;
+    }).join("")}
+    <td colspan="4"></td>
+  </tr>`;
+
+  // Sign row FN
+  const fnSignRow = `<tr style="height:18px;background:#f0f4f8">
+    <td colspan="6" style="text-align:right;font-size:7px;font-weight:600;padding-right:4px;color:#555">Sign: Instructor</td>
+    ${days.map(d=>{
+      const dt=new Date(year,month,d); const isSun=dt.getDay()===0; const isHol=!!S.holidays[dk(d)];
+      if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
+      return `<td style="border-bottom:1px solid #aaa"></td>`;
+    }).join("")}
+    <td colspan="4"></td>
+  </tr>`;
+
+  // Daily totals row AN
+  const anTotRow = `<tr style="background:#e3f2fd;border-top:1px solid #ccc">
+    <td colspan="6" style="text-align:right;font-size:8px;font-weight:700;padding-right:4px">Total AN</td>
+    ${days.map(d=>{
+      const dt=new Date(year,month,d); const isSun=dt.getDay()===0; const isHol=!!S.holidays[dk(d)];
+      if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
+      return `<td style="text-align:center;font-size:8px;font-weight:700">${dayTotal(d,"an")}</td>`;
+    }).join("")}
+    <td colspan="4"></td>
+  </tr>`;
+
+  // Sign row AN
+  const anSignRow = `<tr style="height:18px;background:#e8edf5">
+    <td colspan="6" style="text-align:right;font-size:7px;font-weight:600;padding-right:4px;color:#555">Sign: Instructor</td>
+    ${days.map(d=>{
+      const dt=new Date(year,month,d); const isSun=dt.getDay()===0; const isHol=!!S.holidays[dk(d)];
+      if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
+      return `<td style="border-bottom:1px solid #aaa"></td>`;
+    }).join("")}
+    <td colspan="4"></td>
+  </tr>`;
+
+  // Group instructor sign row
+  const giSignRow = `<tr style="height:20px;background:#f8f8f8">
+    <td colspan="6" style="text-align:right;font-size:7px;font-weight:600;padding-right:4px;color:#555">Sign: Group Instructor</td>
+    ${days.map(d=>{
+      const dt=new Date(year,month,d); const isSun=dt.getDay()===0; const isHol=!!S.holidays[dk(d)];
+      if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
+      return `<td style="border-bottom:1px solid #888"></td>`;
+    }).join("")}
+    <td colspan="4"></td>
+  </tr>`;
+
+  // Principal sign row
+  const vpSignRow = `<tr style="height:20px;background:#f5f5f5">
+    <td colspan="6" style="text-align:right;font-size:7px;font-weight:600;padding-right:4px;color:#555">Sign: Vice Principal / Principal</td>
+    ${days.map(d=>{
+      const dt=new Date(year,month,d); const isSun=dt.getDay()===0; const isHol=!!S.holidays[dk(d)];
+      if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
+      return `<td style="border-bottom:1px solid #888"></td>`;
+    }).join("")}
+    <td colspan="4"></td>
+  </tr>`;
+
+  // Cumulative possible (total possible sessions up to this month)
+  let totalCumPoss=0;
+  students.forEach(s=>{const c=cumStats(s.id);totalCumPoss=Math.max(totalCumPoss,c.poss);});
+
+  const win = window.open("","_blank","width=1200,height=800");
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>Attendance Register - ${monthLabel}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:10px;color:#000}
-.ab-print-page{page-break-after:always;padding:10mm 8mm 8mm 14mm}
-.ab-print-page:last-child{page-break-after:avoid}
-.ab-print-header{text-align:center;margin-bottom:7px}
-.ab-print-header h1{font-size:14px;font-weight:700;text-transform:uppercase}
-.ab-print-header h2{font-size:12px;font-weight:700;margin:2px 0}
-.ab-print-header h3{font-size:11px;font-weight:600;margin:2px 0}
-.ab-print-header hr{border:none;border-top:2px solid #000;margin:5px 0 3px}
-.ab-ptable{width:100%;border-collapse:collapse}
-.ab-ptable th{background:#e0e0e0;border:1px solid #888;padding:3px 1px;font-size:8px;font-weight:700;text-align:center}
-.ab-ptable td{border:1px solid #ccc;padding:2px 1px;text-align:center;height:20px;vertical-align:middle}
-.ab-ptable td.pname{text-align:left;padding-left:3px;font-weight:500;min-width:90px}
-.ab-ptable td.psl{font-size:8px;color:#555;min-width:16px}
-.ab-ptable td.pstat{font-weight:700;font-size:9px;min-width:24px}
-.sun{background:#fee2e2!important}.hol{background:#fed7aa!important}
-.mx{font-weight:900;font-size:13px}.msl{font-weight:900;font-size:12px}.msr{font-weight:900;font-size:12px}
-.ma{font-weight:700;font-size:9px;color:#c00}
-.mpe{font-weight:900;font-size:10px;color:#6d28d9}
-.mcl{font-weight:700;font-size:8px;color:#1d4ed8}.mml{font-weight:700;font-size:8px;color:#b45309}
-.ab-sign{margin-top:14px;display:flex;justify-content:space-between}
-.ab-sign div{text-align:center;min-width:110px;border-top:1px solid #000;padding-top:3px;font-size:9px;font-weight:700}
-.ab-sign div small{display:block;font-size:7px;font-weight:400;color:#555;margin-top:1px}
-@page{margin:0;size:A4 portrait}
+body{font-family:Arial,sans-serif;font-size:9px;color:#000}
+.page{padding:6mm 5mm 4mm 8mm}
+.top-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+.top-left{text-align:center;flex:1}
+.top-right{text-align:right;font-size:8px;min-width:120px}
+h1{font-size:16px;font-weight:900;letter-spacing:1px}
+h2{font-size:11px;font-weight:700;margin:1px 0}
+h3{font-size:9px;font-weight:600}
+.sub{font-size:8px;color:#333;margin-top:2px}
+hr{border:none;border-top:2px solid #000;margin:3px 0}
+table{width:100%;border-collapse:collapse}
+th{background:#e0e0e0;border:1px solid #888;padding:2px 1px;font-size:8px;font-weight:700;text-align:center}
+td{border:1px solid #ccc;padding:1px;height:18px;vertical-align:middle}
+.sign-footer{display:flex;justify-content:space-between;margin-top:8px;padding-top:4px;border-top:1px solid #ccc}
+.sign-box{text-align:center;min-width:120px;border-top:1px solid #000;padding-top:3px;font-size:8px;font-weight:700}
+.sign-box small{display:block;font-size:7px;font-weight:400;color:#555}
+.legend{font-size:7px;color:#444;margin-top:4px;display:flex;gap:12px;flex-wrap:wrap}
+@page{margin:0;size:A4 landscape}
 </style></head><body>
-${page1}${page2}
+<div class="page">
+  <div class="top-header">
+    <div class="top-left">
+      <h1>GOVT. I T I &nbsp;&nbsp;&nbsp; ${inst.replace("Govt ITI ","").replace("Govt. ITI ","").toUpperCase()}</h1>
+      <h2>Attendance Register of ${bname} &nbsp;&nbsp; for the month of ${monthLabel}</h2>
+      <hr>
+      <div class="sub">${instrLabel} &nbsp;|&nbsp; Academic Year: ${acYear}</div>
+    </div>
+    <div class="top-right">
+      <div style="font-size:9px;font-weight:700">Possible Cumulative: ${totalCumPoss}</div>
+      <div style="font-size:9px;margin-top:2px">20......${year%100}... Possible: ${students.length>0?monthStats(students[0].id).poss:""}</div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th rowspan="2" style="min-width:16px">Sl<br>No</th>
+        <th rowspan="2" style="min-width:28px">Adm<br>No</th>
+        <th rowspan="2" style="min-width:100px;text-align:left;padding-left:3px">NAME</th>
+        <th rowspan="2" style="min-width:14px;font-size:6px">CL<br>Elig</th>
+        <th rowspan="2" style="min-width:14px;font-size:6px">CL<br>Used</th>
+        <th rowspan="2" style="min-width:14px;font-size:6px">ML<br>Used</th>
+        ${dayHeaders}
+        <th rowspan="2" style="min-width:20px;font-size:7px">Pre-<br>sent</th>
+        <th rowspan="2" style="min-width:24px;font-size:7px">Present<br>Cumul.</th>
+        <th rowspan="2" style="min-width:22px;font-size:7px">%</th>
+        <th rowspan="2" style="min-width:40px;font-size:7px">Remarks</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${studentRows}
+      ${fnTotRow}
+      ${fnSignRow}
+      ${anTotRow}
+      ${anSignRow}
+      ${giSignRow}
+      ${vpSignRow}
+    </tbody>
+  </table>
+  <div class="legend">
+    <span>✗ = Full day present</span>
+    <span>╱ = FN present only</span>
+    <span>╲ = AN present only</span>
+    <span style="color:#6d28d9;font-weight:700">P</span><span>= Permission</span>
+    <span style="color:#c00;font-weight:700">A</span><span>= Absent</span>
+    <span style="color:#1d4ed8">CL</span><span>= Casual Leave</span>
+    <span style="color:#b45309">ML</span><span>= Medical Leave</span>
+    <span style="background:#ffd6d6;padding:0 3px">Red col</span><span>= Sunday</span>
+    <span style="background:#ffd9b3;padding:0 3px">Orange</span><span>= Holiday</span>
+    ${dateStr?`<span style="margin-left:auto">Date: ${dateStr}</span>`:""}
+  </div>
+</div>
 <script>window.onload=()=>{window.print()}<\/script>
 </body></html>`);
   win.document.close();
@@ -1904,6 +2126,18 @@ async function handleClick(e){
     S.attendance[dk][sid]={fn,an};
     refreshPage();
     saveAttendanceFS(dk,sid,fn,an).catch(e=>toast("Save error: "+e.message,"error"));
+    return;
+  }
+  if(a==="toggle-expand"){
+    const sid=btn.dataset.sid;
+    const body=document.getElementById("exp-body-"+sid);
+    const arrow=document.getElementById("exp-arrow-"+sid);
+    if(body){
+      const isOpen=body.classList.contains("open");
+      body.style.display=isOpen?"none":"block";
+      body.classList.toggle("open",!isOpen);
+      if(arrow)arrow.textContent=isOpen?"▾":"▴";
+    }
     return;
   }
   if(a==="mark-both"){bothModal(btn.dataset.sid,btn.dataset.dk,btn.dataset.fn,btn.dataset.an);return;}
