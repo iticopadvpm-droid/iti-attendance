@@ -1224,6 +1224,7 @@ function renderAttendance(){
       <button class="btn btn-success btn-sm" data-action="mark-all-present">All Present</button>
       <button class="btn btn-danger btn-sm" data-action="mark-all-absent">All Absent</button>
       <button class="btn btn-sm" style="background:#f3e8ff;border:1px solid #c4b5fd;color:#7c3aed" data-action="mark-all-permission">All Permission</button>
+        <button class="btn btn-sm" style="background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1" data-action="share-attendance">📤 Share</button>
     </div>
   </div>
 </div>
@@ -1546,6 +1547,239 @@ function renderSettings(){
 // ============================================================
 // MODALS
 // ============================================================
+// ── PIN verification for destructive actions ──
+function shareAttendanceModal() {
+  const {batchId, year, month, day} = S.attState;
+  const maxDay = daysInMonth(year, month);
+  const d = Math.min(day, maxDay);
+  const dk = `${year}-${pad(month+1)}-${pad(d)}`;
+  const students = S.students.filter(s=>s.batchId===batchId);
+  const batch = S.batches.find(b=>b.id===batchId);
+  const bname = batch ? `${batch.trade} ${batch.name}` : "";
+  const inst = S.profile?.institute || "Govt ITI Dhanuvachapuram";
+  const dt = new Date(year, month, d);
+  const dowFull = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dt.getDay()];
+  const dateLabel = `${d} ${MONTHS[month]} ${year} (${dowFull})`;
+
+  // Count stats
+  let presentFull=0, absentFull=0, halfDay=0, perm=0, cl=0, ml=0;
+  students.forEach(s=>{
+    const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
+    const fp=r.fn==="P"||r.fn==="Pe", ap=r.an==="P"||r.an==="Pe";
+    if(r.fn==="CL"||r.an==="CL"){cl++;return;}
+    if(r.fn==="ML"||r.an==="ML"){ml++;return;}
+    if(r.fn==="Pe"&&r.an==="Pe"){perm++;return;}
+    if(r.fn==="Pe"||r.an==="Pe"){perm++;return;}
+    if(fp&&ap){presentFull++;return;}
+    if(fp||ap){halfDay++;return;}
+    if(r.fn==="A"||r.an==="A"){absentFull++;return;}
+  });
+
+  showModal(`
+<div class="modal-header">
+  <h3>📤 Share Attendance</h3>
+  <button class="btn-icon" onclick="closeModal()">✕</button>
+</div>
+<div class="modal-body">
+  <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 12px;margin-bottom:16px;font-size:12px">
+    <div class="fw500">${bname}</div>
+    <div class="text-muted" style="font-size:11px">${dateLabel}</div>
+    <div class="flex flex-wrap mt8" style="gap:10px;font-size:12px">
+      <span style="color:var(--success)">✅ Present: <strong>${presentFull}</strong></span>
+      <span style="color:var(--danger)">❌ Absent: <strong>${absentFull}</strong></span>
+      <span style="color:#7c3aed">🔵 Permission: <strong>${perm}</strong></span>
+      <span style="color:var(--warn)">½ Half day: <strong>${halfDay}</strong></span>
+      <span style="color:#1d4ed8">CL: <strong>${cl}</strong></span>
+      <span style="color:#b45309">ML: <strong>${ml}</strong></span>
+    </div>
+  </div>
+  <p class="text-sm text-secondary mb12 fw500">What to share?</p>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)">
+      <input type="radio" name="share-type" value="absent" checked style="width:auto;margin-top:2px"/>
+      <div>
+        <div class="fw500" style="font-size:13px">Absent students only</div>
+        <div class="text-muted" style="font-size:11px">Absent, half-day, CL, ML, permission — who is not fully present</div>
+      </div>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)">
+      <input type="radio" name="share-type" value="all" style="width:auto;margin-top:2px"/>
+      <div>
+        <div class="fw500" style="font-size:13px">All students attendance</div>
+        <div class="text-muted" style="font-size:11px">Complete list with each student's status</div>
+      </div>
+    </label>
+  </div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+  <button class="btn btn-primary" data-action="do-share" data-dk="${dk}" data-bname="${bname}" data-inst="${inst}" data-date="${dateLabel}" data-total="${students.length}">📤 Share</button>
+</div>`);
+}
+
+function buildShareText(dk, bname, inst, dateLabel, total, mode) {
+  const students = S.students.filter(s=>s.batchId===S.attState.batchId);
+  const isP = v => v==="P"||v==="Pe";
+
+  const statusOf = (s) => {
+    const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
+    const fp=isP(r.fn), ap=isP(r.an);
+    if(r.fn==="CL"||r.an==="CL") return{emoji:"🟡",label:"CL",sort:4};
+    if(r.fn==="ML"||r.an==="ML") return{emoji:"🟠",label:"ML",sort:5};
+    if((r.fn==="Pe"||r.an==="Pe")&&fp&&ap) return{emoji:"🔵",label:"Permission",sort:3};
+    if(fp&&ap) return{emoji:"✅",label:"Present",sort:1};
+    if(fp&&!ap) return{emoji:"🕐",label:"AN absent",sort:6};
+    if(!fp&&ap) return{emoji:"🕐",label:"FN absent",sort:6};
+    if(r.fn==="A"||r.an==="A") return{emoji:"❌",label:"Absent",sort:2};
+    return{emoji:"⬜",label:"Not marked",sort:7};
+  };
+
+  let msg = `📋 *${inst}*
+`;
+  msg += `*${bname}*
+`;
+  msg += `📅 ${dateLabel}
+`;
+  msg += `${"─".repeat(30)}
+
+`;
+
+  if(mode==="absent"){
+    // Group non-fully-present students
+    const absent=[], halfFN=[], halfAN=[], permission=[], clList=[], mlList=[], notMarked=[];
+    students.forEach(s=>{
+      const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
+      const fp=isP(r.fn), ap=isP(r.an);
+      const entry=`• ${s.name} (${s.adm})`;
+      if(r.fn==="CL"||r.an==="CL"){clList.push(entry);return;}
+      if(r.fn==="ML"||r.an==="ML"){mlList.push(entry);return;}
+      if(r.fn==="Pe"||r.an==="Pe"){
+        if(fp&&ap){permission.push(entry);return;}
+      }
+      if(fp&&ap) return; // fully present — skip
+      if(fp&&!ap){halfAN.push(entry);return;}
+      if(!fp&&ap){halfFN.push(entry);return;}
+      if(r.fn==="A"||r.an==="A"){absent.push(entry);return;}
+      if(!r.fn&&!r.an){notMarked.push(entry);return;}
+    });
+
+    const presentCount=students.filter(s=>{const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};return isP(r.fn)&&isP(r.an);}).length;
+
+    if(absent.length){msg+=`❌ *ABSENT (${absent.length}):*
+${absent.join("
+")}
+
+`;}
+    if(halfFN.length){msg+=`🕐 *FN ABSENT (${halfFN.length}):*
+${halfFN.join("
+")}
+
+`;}
+    if(halfAN.length){msg+=`🕐 *AN ABSENT (${halfAN.length}):*
+${halfAN.join("
+")}
+
+`;}
+    if(permission.length){msg+=`🔵 *PERMISSION (${permission.length}):*
+${permission.join("
+")}
+
+`;}
+    if(clList.length){msg+=`🟡 *CASUAL LEAVE (${clList.length}):*
+${clList.join("
+")}
+
+`;}
+    if(mlList.length){msg+=`🟠 *MEDICAL LEAVE (${mlList.length}):*
+${mlList.join("
+")}
+
+`;}
+    if(notMarked.length){msg+=`⬜ *NOT MARKED (${notMarked.length}):*
+${notMarked.join("
+")}
+
+`;}
+
+    msg+=`${"─".repeat(30)}
+`;
+    msg+=`✅ Present: ${presentCount} | Total: ${total}`;
+  } else {
+    // All students
+    students.forEach((s,i)=>{
+      const st=statusOf(s);
+      msg+=`${i+1}. ${s.name} (${s.adm}) ${st.emoji} ${st.label}
+`;
+    });
+    const presentCount=students.filter(s=>{const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};return isP(r.fn)&&isP(r.an);}).length;
+    const absentCount=students.filter(s=>{const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};return r.fn==="A"&&r.an==="A";}).length;
+    msg+=`
+${"─".repeat(30)}
+`;
+    msg+=`✅ Present: ${presentCount} | ❌ Absent: ${absentCount} | Total: ${total}`;
+  }
+
+  msg+=`
+
+_Sent via ITI Attendance System_`;
+  return msg;
+}
+
+function showPinVerifyModal(title, warningMsg, onSuccess) {
+  let pinBuf = "";
+  showModal(`
+<div class="modal-header">
+  <h3 style="color:var(--danger)">🔐 ${title}</h3>
+  <button class="btn-icon" onclick="closeModal()">✕</button>
+</div>
+<div class="modal-body">
+  <div style="background:var(--danger-bg);border:1px solid var(--danger-border);border-radius:var(--radius);padding:10px 12px;margin-bottom:16px;font-size:13px;color:var(--danger)">
+    ⚠️ ${warningMsg}
+  </div>
+  <p class="text-sm text-secondary mb12">Enter your 4-digit PIN to confirm deletion.</p>
+  <div class="pin-dots" id="vpin-dots" style="justify-content:center;margin:12px 0">
+    <div class="pin-dot"></div><div class="pin-dot"></div>
+    <div class="pin-dot"></div><div class="pin-dot"></div>
+  </div>
+  <p id="vpin-err" class="text-sm text-danger" style="display:none;text-align:center;margin-bottom:8px">Incorrect PIN. Try again.</p>
+  <div class="pin-keypad" style="max-width:200px;margin:0 auto">
+    ${[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map(k=>
+      k===""?`<div></div>`:`<button class="pin-key" data-vkey="${k}">${k}</button>`
+    ).join("")}
+  </div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+</div>`);
+
+  function updateDots(){
+    document.querySelectorAll("#vpin-dots .pin-dot").forEach((d,i)=>{
+      d.classList.toggle("filled", i < pinBuf.length);
+    });
+  }
+
+  document.querySelectorAll("[data-vkey]").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      const k = btn.dataset.vkey;
+      if(k==="⌫") pinBuf=pinBuf.slice(0,-1);
+      else if(pinBuf.length<4) pinBuf+=k;
+      updateDots();
+      if(pinBuf.length===4){
+        const hash = await hashPin(pinBuf);
+        if(hash===S.profile.pinHash){
+          closeModal();
+          onSuccess();
+        } else {
+          pinBuf="";
+          updateDots();
+          const err=document.getElementById("vpin-err");
+          if(err){ err.style.display="block"; setTimeout(()=>{err.style.display="none";},2000); }
+        }
+      }
+    });
+  });
+}
+
 function batchModal(id){
   const b=S.batches.find(x=>x.id===id)||{};
   showModal(`
@@ -2141,15 +2375,24 @@ async function handleClick(e){
     return;
   }
   if(a==="del-batch"){
-    if(!confirm("Delete this batch and all its students?"))return;
-    setLoading(true);
-    try{
-      await deleteBatchFS(btn.dataset.id);
-      S.batches=S.batches.filter(b=>b.id!==btn.dataset.id);
-      S.students=S.students.filter(s=>s.batchId!==btn.dataset.id);
-      refreshPage();toast("Batch deleted");
-    }catch(e){toast(e.message,"error");}
-    finally{setLoading(false);}
+    const batchId=btn.dataset.id;
+    const batch=S.batches.find(b=>b.id===batchId);
+    const stuCount=S.students.filter(s=>s.batchId===batchId).length;
+    const bname=batch?batch.name:"this batch";
+    showPinVerifyModal(
+      "Delete Batch",
+      `You are about to permanently delete "${bname}" and all ${stuCount} enrolled student(s). This cannot be undone.`,
+      async ()=>{
+        setLoading(true);
+        try{
+          await deleteBatchFS(batchId);
+          S.batches=S.batches.filter(b=>b.id!==batchId);
+          S.students=S.students.filter(s=>s.batchId!==batchId);
+          refreshPage();toast("Batch deleted");
+        }catch(e){toast(e.message,"error");}
+        finally{setLoading(false);}
+      }
+    );
     return;
   }
 
@@ -2175,14 +2418,22 @@ async function handleClick(e){
     return;
   }
   if(a==="del-student"){
-    if(!confirm("Remove this student?"))return;
-    setLoading(true);
-    try{
-      await deleteStudentFS(btn.dataset.id);
-      S.students=S.students.filter(s=>s.id!==btn.dataset.id);
-      refreshPage();toast("Student removed");
-    }catch(e){toast(e.message,"error");}
-    finally{setLoading(false);}
+    const sid=btn.dataset.id;
+    const stu=S.students.find(s=>s.id===sid);
+    const sname=stu?stu.name:"this student";
+    showPinVerifyModal(
+      "Delete Student",
+      `You are about to permanently delete "${sname}" and all their attendance records.`,
+      async ()=>{
+        setLoading(true);
+        try{
+          await deleteStudentFS(sid);
+          S.students=S.students.filter(s=>s.id!==sid);
+          refreshPage();toast("Student removed");
+        }catch(e){toast(e.message,"error");}
+        finally{setLoading(false);}
+      }
+    );
     return;
   }
 
@@ -2196,6 +2447,34 @@ async function handleClick(e){
     S.attendance[dk][sid]={fn,an};
     refreshPage();
     saveAttendanceFS(dk,sid,fn,an).catch(e=>toast("Save error: "+e.message,"error"));
+    return;
+  }
+  if(a==="share-attendance"){
+    shareAttendanceModal();
+    return;
+  }
+  if(a==="do-share"){
+    const mode=document.querySelector("input[name='share-type']:checked")?.value||"absent";
+    const{dk,bname,inst,date:dateLabel,total}=btn.dataset;
+    const text=buildShareText(dk,bname,inst,dateLabel,parseInt(total),mode);
+    closeModal();
+    if(navigator.share){
+      navigator.share({title:"Attendance Report",text}).catch(()=>{});
+    } else {
+      // Fallback — copy to clipboard
+      navigator.clipboard?.writeText(text).then(()=>{
+        toast("Copied to clipboard — paste in WhatsApp or SMS","info");
+      }).catch(()=>{
+        // Last resort — show text in modal
+        showModal(`
+<div class="modal-header"><h3>Share text</h3><button class="btn-icon" onclick="closeModal()">✕</button></div>
+<div class="modal-body">
+  <p class="text-sm text-muted mb8">Copy this text and paste in WhatsApp / SMS:</p>
+  <textarea style="width:100%;height:200px;font-size:12px;font-family:monospace;border:1px solid var(--border);border-radius:var(--radius);padding:8px" readonly>${text}</textarea>
+</div>
+<div class="modal-footer"><button class="btn btn-primary" onclick="navigator.clipboard.writeText(document.querySelector('textarea').value).then(()=>toast('Copied!'));closeModal()">Copy</button></div>`);
+      });
+    }
     return;
   }
   if(a==="toggle-expand"){
