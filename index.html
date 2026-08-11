@@ -382,8 +382,9 @@ let S = {
   hrState: { batchId:"", h1s:"", h1e:"", h2s:"", h2e:"" },
   syncStatus: "ok",     // ok | syncing | error
   holidays: {},         // { "YYYY-MM-DD": { name: "Onam" } }
+  shopfloor: {},        // { "YYYY-MM-DD": { studentId: 0.25|0.33|0.5|1.0 } }
   // print overrides (editable on report pages, not saved to profile)
-  printDetails: { name:"", position:"SI", trade:"", printDate:true }
+  printDetails: { name:"", position:"SI", trade:"", printDate:true, includeSF:true }
 };
 
 let lastMonthlyData=null, lastMonthlyMeta=null;
@@ -400,8 +401,10 @@ const studentsRef  = () => collection(db, userPath(), "students");
 const studentRef   = (id) => doc(db, userPath(), "students", id);
 const attRef       = (dk) => doc(db, userPath(), "attendance", dk);
 const attColRef    = () => collection(db, userPath(), "attendance");
-const holidaysRef  = () => collection(db, userPath(), "holidays");
-const holidayRef   = (dk) => doc(db, userPath(), "holidays", dk);
+const holidaysRef   = () => collection(db, userPath(), "holidays");
+const holidayRef    = (dk) => doc(db, userPath(), "holidays", dk);
+const shopfloorRef  = () => collection(db, userPath(), "shopfloor");
+const sfDayRef      = (dk) => doc(db, userPath(), "shopfloor", dk);
 const parentLinkRef = () => doc(db, userPath(), "_meta", "parentlink");
 // Parent view data stored in public top-level collection
 const pubLinkRef = (token) => doc(db, "parentlinks", token);
@@ -546,7 +549,7 @@ async function markAllFS(dk, studentIds, fn, an) {
 // ============================================================
 // REPORT CALCULATIONS (client-side from cached S.attendance)
 // ============================================================
-function calcMonthlyReport(batchId, year, month) {
+function calcMonthlyReport(batchId, year, month, includeSF=true) {
   const students = S.students.filter(s=>s.batchId===batchId);
   const firstDay = `${year}-${pad(month+1)}-01`;
   const lastDay  = `${year}-${pad(month+1)}-${pad(daysInMonth(year,month))}`;
@@ -562,11 +565,15 @@ function calcMonthlyReport(batchId, year, month) {
       if (dk >= firstDay && dk <= lastDay) { mPoss+=poss; mPres+=pres; }
       if (dk <= lastDay) { cumPoss+=poss; cumPres+=pres; }
     }
+    // Add shopfloor credits (no impact on possible)
+    const mSF   = includeSF ? sfCreditsRange(s.id, firstDay, lastDay) : 0;
+    const cumSF = includeSF ? sfCredits(s.id, lastDay) : 0;
+    const cumPresTotal = cumPres + cumSF;
     return {
       id:s.id, adm:s.adm, name:s.name,
-      monthPoss:mPoss, monthPres:mPres,
-      cumPoss, cumPres,
-      pct: cumPoss>0 ? Math.round(cumPres/cumPoss*100) : 0
+      monthPoss:mPoss, monthPres:mPres, monthSF:mSF,
+      cumPoss, cumPres:cumPresTotal, cumSF,
+      pct: cumPoss>0 ? Math.round(cumPresTotal/cumPoss*100) : 0
     };
   });
 }
@@ -625,7 +632,7 @@ async function loadAllAttendance() {
   snap.docs.forEach(d => { S.attendance[d.id] = d.data(); });
 }
 
-function calcHalfYearReport(batchId, h1s, h1e, h2s, h2e) {
+function calcHalfYearReport(batchId, h1s, h1e, h2s, h2e, includeSF=true) {
   const students = S.students.filter(s=>s.batchId===batchId);
   return students.map(s => {
     let h1Poss=0,h1Pres=0,h2Poss=0,h2Pres=0;
@@ -638,10 +645,15 @@ function calcHalfYearReport(batchId, h1s, h1e, h2s, h2e) {
       if (dk>=h1s&&dk<=h1e){ h1Poss+=poss; h1Pres+=pres; }
       if (dk>=h2s&&dk<=h2e){ h2Poss+=poss; h2Pres+=pres; }
     }
+    const h1SF = includeSF ? sfCreditsRange(s.id,h1s,h1e) : 0;
+    const h2SF = includeSF ? sfCreditsRange(s.id,h2s,h2e) : 0;
+    const h1Total = h1Pres+h1SF, h2Total = h2Pres+h2SF;
     return {
       id:s.id, adm:s.adm, name:s.name,
-      h1Poss,h1Pres, h1Pct:h1Poss>0?Math.round(h1Pres/h1Poss*100):0,
-      h2Poss,h2Pres, h2Pct:h2Poss>0?Math.round(h2Pres/h2Poss*100):0
+      h1Poss, h1Pres:h1Total, h1SF,
+      h1Pct:h1Poss>0?Math.round(h1Total/h1Poss*100):0,
+      h2Poss, h2Pres:h2Total, h2SF,
+      h2Pct:h2Poss>0?Math.round(h2Total/h2Poss*100):0
     };
   });
 }
@@ -1067,7 +1079,7 @@ async function submitPin(){
 // LOAD ALL DATA
 // ============================================================
 async function loadAll(){
-  await Promise.all([loadBatches(), loadStudents()]);
+  await Promise.all([loadBatches(), loadStudents(), loadShopfloor()]);
   // Load this month's attendance
   await loadAttendanceMonth(S.attState.year, S.attState.month);
   // Set defaults
@@ -1091,6 +1103,7 @@ const NAV=[
   {id:"monthly",   label:"Monthly Report",  icon:"📋"},
   {id:"halfyear",  label:"H1 / H2 Report",  icon:"📈"},
   {id:"attbook",   label:"Attendance Book",  icon:"📖"},
+  {id:"shopfloor",  label:"Shopfloor",         icon:"🏭"},
   {sep:true},
   {id:"settings",  label:"Settings",        icon:"⚙️"},
 ];
@@ -1151,6 +1164,7 @@ function bindApp(){
       if(pg==="attendance") loadAttPageData();
       else if(pg==="students") loadStudentsPageData();
       else if(pg==="attbook") loadAttBookData();
+      else if(pg==="shopfloor") loadShopfloorData();
       else refreshPage();
       // Close mobile sidebar after navigation
       document.getElementById("main-sidebar")?.classList.remove("mobile-open");
@@ -1181,6 +1195,7 @@ function renderPage(){
     case"monthly":   return renderMonthly();
     case"halfyear":  return renderHalfYear();
     case"attbook":   return renderAttBook();
+    case"shopfloor": return renderShopfloor();
     case"settings":  return renderSettings();
     default: return "";
   }
@@ -1403,10 +1418,14 @@ function renderMonthly(){
         <div><label class="form-label">Instructor name</label><input id="pd-name" value="${pd.name}" style="width:180px"/></div>
         <div><label class="form-label">Position</label><select id="pd-pos" style="width:180px">${posOpts}</select></div>
         <div><label class="form-label">Trade</label><input id="pd-trade" value="${pd.trade}" style="width:100px"/></div>
-        <div style="margin-top:20px">
+        <div style="margin-top:20px;display:flex;flex-direction:column;gap:6px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
             <input type="checkbox" id="pd-date" ${pd.printDate?"checked":""} style="width:auto;cursor:pointer"/>
             Print today's date
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="pd-sf" ${pd.includeSF?"checked":""} style="width:auto;cursor:pointer"/>
+            Include Shopfloor attendance
           </label>
         </div>
         <button class="btn btn-primary btn-sm" style="margin-top:18px" data-action="load-monthly">Generate</button>
@@ -1454,10 +1473,14 @@ function renderHalfYear(){
         <div><label class="form-label">Instructor name</label><input id="hr-pd-name" value="${pd.name}" style="width:180px"/></div>
         <div><label class="form-label">Position</label><select id="hr-pd-pos" style="width:180px">${posOpts}</select></div>
         <div><label class="form-label">Trade</label><input id="hr-pd-trade" value="${pd.trade}" style="width:100px"/></div>
-        <div style="margin-top:20px">
+        <div style="margin-top:20px;display:flex;flex-direction:column;gap:6px">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
             <input type="checkbox" id="hr-pd-date" ${pd.printDate?"checked":""} style="width:auto;cursor:pointer"/>
             Print today's date
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+            <input type="checkbox" id="hr-pd-sf" ${pd.includeSF?"checked":""} style="width:auto;cursor:pointer"/>
+            Include Shopfloor attendance
           </label>
         </div>
         <button class="btn btn-primary btn-sm" style="margin-top:18px" data-action="load-halfyear">Calculate</button>
@@ -1469,6 +1492,158 @@ function renderHalfYear(){
 <div class="card p0" id="hr-result">
   <div style="text-align:center;padding:30px;color:var(--text3)">Set periods and click Calculate.</div>
 </div>`;
+}
+
+// ============================================================
+// SHOPFLOOR FUNCTIONS
+// ============================================================
+const SF_VALUES = [
+  {val:0.25, label:"¼", title:"Quarter day"},
+  {val:0.33, label:"⅓", title:"One third day"},
+  {val:0.5,  label:"½", title:"Half day"},
+  {val:1.0,  label:"1", title:"Full day"}
+];
+
+async function loadShopfloor() {
+  const snap = await getDocs(shopfloorRef());
+  S.shopfloor = {};
+  snap.docs.forEach(d => { S.shopfloor[d.id] = d.data(); });
+}
+
+async function saveSFEntry(dk, sid, val) {
+  setSyncStatus("syncing");
+  try {
+    const ref = sfDayRef(dk);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      if (val === null) {
+        // Remove entry
+        const data = {...snap.data()};
+        delete data[sid];
+        await setDoc(ref, data);
+        if (S.shopfloor[dk]) delete S.shopfloor[dk][sid];
+      } else {
+        await updateDoc(ref, { [sid]: val });
+        if (!S.shopfloor[dk]) S.shopfloor[dk] = {};
+        S.shopfloor[dk][sid] = val;
+      }
+    } else if (val !== null) {
+      await setDoc(ref, { [sid]: val });
+      S.shopfloor[dk] = { [sid]: val };
+    }
+    setSyncStatus("ok");
+  } catch(e) { setSyncStatus("error"); throw e; }
+}
+
+async function clearSFDay(dk, studentIds) {
+  setSyncStatus("syncing");
+  try {
+    const ref = sfDayRef(dk);
+    await setDoc(ref, {});
+    S.shopfloor[dk] = {};
+    setSyncStatus("ok");
+  } catch(e) { setSyncStatus("error"); throw e; }
+}
+
+let sfState = { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate() };
+
+async function loadShopfloorData() {
+  setLoading(true, "Loading shopfloor...");
+  try {
+    await Promise.all([loadStudents(), loadShopfloor()]);
+    if(!sfState.batchId && S.batches.length) sfState.batchId = S.batches[0].id;
+    refreshPage();
+  } catch(e) { toast(e.message,"error"); refreshPage(); }
+  finally { setLoading(false); }
+}
+
+// Get total shopfloor credits for a student up to a date
+function sfCredits(sid, upToDk) {
+  let total = 0;
+  for (const [dk, rec] of Object.entries(S.shopfloor)) {
+    if (upToDk && dk > upToDk) continue;
+    if (rec[sid]) total += parseFloat(rec[sid]);
+  }
+  return total;
+}
+
+// Get shopfloor credits for a student in a date range
+function sfCreditsRange(sid, fromDk, toDk) {
+  let total = 0;
+  for (const [dk, rec] of Object.entries(S.shopfloor)) {
+    if (dk < fromDk || dk > toDk) continue;
+    if (rec[sid]) total += parseFloat(rec[sid]);
+  }
+  return total;
+}
+
+function renderShopfloor() {
+  const {batchId, year, month, day} = sfState;
+  const maxDay = daysInMonth(year, month);
+  const d = Math.min(day, maxDay);
+  const dk = `${year}-${pad(month+1)}-${pad(d)}`;
+  const students = S.students.filter(s=>s.batchId===batchId);
+  const bOpts = S.batches.map(b=>`<option value="${b.id}"${batchId===b.id?" selected":""}>${b.name}</option>`).join("");
+  const mOpts = MONTHS.map((m,i)=>`<option value="${i}"${month===i?" selected":""}>${m}</option>`).join("");
+  const dOpts = Array.from({length:maxDay},(_,i)=>`<option value="${i+1}"${d===i+1?" selected":""}>${i+1}</option>`).join("");
+  const selDt = new Date(year,month,d);
+  const dowLabel = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][selDt.getDay()];
+
+  let totalSF = 0;
+  const cards = students.map((s,idx)=>{
+    const sfVal = (S.shopfloor[dk]||{})[s.id] || null;
+    if(sfVal) totalSF += parseFloat(sfVal);
+    const sfBtns = SF_VALUES.map(v=>{
+      const active = sfVal === v.val;
+      return `<button class="att-quick-btn${active?" sf-active":""}" style="${active?"background:#fef08a;border-color:#ca8a04;color:#713f12;font-weight:700":""}" data-action="mark-sf" data-sid="${s.id}" data-dk="${dk}" data-val="${v.val}" title="${v.title}">${v.label}</button>`;
+    }).join("");
+    const clearBtn = sfVal ? `<button class="att-quick-btn" style="background:#fee2e2;border-color:#fca5a5;color:#dc2626;font-size:11px" data-action="mark-sf" data-sid="${s.id}" data-dk="${dk}" data-val="clear">✕</button>` : "";
+    const sfChip = sfVal ? `<span style="background:#fef08a;border:1px solid #ca8a04;border-radius:12px;padding:2px 8px;font-size:12px;font-weight:700;color:#713f12">${SF_VALUES.find(v=>v.val===sfVal)?.label||sfVal}</span>` : `<span style="font-size:11px;color:var(--text3);font-style:italic">not marked</span>`;
+
+    return `<div class="att-mobile-card">
+  <div class="att-mobile-header" style="cursor:default">
+    <span class="att-mobile-sl">${idx+1}</span>
+    <span class="att-mobile-name">${s.name}</span>
+    <span class="att-mobile-status">${sfChip}</span>
+  </div>
+  <div style="padding:8px 12px 10px;background:var(--surface);border-top:1px solid var(--border)">
+    <div class="flex" style="gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;color:var(--text3);font-weight:600">Credit:</span>
+      ${sfBtns}
+      ${clearBtn}
+    </div>
+  </div>
+</div>`;
+  }).join("");
+
+  return `
+<div class="card mb12">
+  <div class="card-body" style="padding:12px 14px">
+    <div style="background:#fef9c3;border:1px solid #fde047;border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;font-size:12px;color:#713f12">
+      <strong>🏭 Shopfloor / Extra Class</strong> — Credits add to <strong>Present</strong> count without increasing <strong>Possible</strong>. Helps students with attendance shortage reach 80%.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+      <div><label class="form-label">Batch</label><select id="sf-batch">${bOpts}</select></div>
+      <div><label class="form-label">Month</label><select id="sf-month">${mOpts}</select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div><label class="form-label">Day</label><select id="sf-day">${dOpts}</select></div>
+      <div><label class="form-label">Year</label><input type="number" id="sf-year" value="${year}"/></div>
+      <div style="padding-top:18px"><span style="font-size:12px;font-weight:600;color:var(--text2)">${dowLabel}</span></div>
+    </div>
+  </div>
+</div>
+
+${students.length ? `
+<div style="margin-bottom:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius2);font-size:12px;display:flex;gap:14px;flex-wrap:wrap">
+  <span>SF Credits today: <strong style="color:#b45309">${totalSF.toFixed(2)}</strong></span>
+  <span>Students marked: <strong>${Object.keys(S.shopfloor[dk]||{}).length}</strong></span>
+  <span style="margin-left:auto;color:var(--text3);font-size:11px">${dk}</span>
+</div>
+<div style="font-size:11px;color:var(--text3);margin-bottom:8px;padding:0 2px">
+  ¼=0.25 &nbsp;⅓=0.33 &nbsp;½=0.50 &nbsp;1=Full day &nbsp;✕=Clear
+</div>
+${cards}` : `<div class="card" style="text-align:center;padding:30px;color:var(--text3)">No students in this batch.</div>`}`;
 }
 
 // ============================================================
@@ -2571,11 +2746,18 @@ function handleChange(e){
   else if(t.id==="pd-pos"){S.printDetails.position=t.value;}
   else if(t.id==="pd-trade"){S.printDetails.trade=t.value;}
   else if(t.id==="pd-date"){S.printDetails.printDate=t.checked;}
+  else if(t.id==="pd-sf"){S.printDetails.includeSF=t.checked;}
   // Print detail fields — halfyear
   else if(t.id==="hr-pd-name"){S.printDetails.name=t.value;}
   else if(t.id==="hr-pd-pos"){S.printDetails.position=t.value;}
   else if(t.id==="hr-pd-trade"){S.printDetails.trade=t.value;}
   else if(t.id==="hr-pd-date"){S.printDetails.printDate=t.checked;}
+  else if(t.id==="hr-pd-sf"){S.printDetails.includeSF=t.checked;}
+  // Shopfloor filters
+  else if(t.id==="sf-batch"){sfState.batchId=t.value;refreshPage();}
+  else if(t.id==="sf-month"){sfState.month=parseInt(t.value);loadShopfloorData();}
+  else if(t.id==="sf-year"){sfState.year=parseInt(t.value)||TODAY.getFullYear();loadShopfloorData();}
+  else if(t.id==="sf-day"){sfState.day=parseInt(t.value);refreshPage();}
   // Attendance book filters
   else if(t.id==="ab-batch"){attBookState.batchId=t.value;refreshPage();}
   else if(t.id==="ab-month"){attBookState.month=parseInt(t.value);loadAttBookData();}
@@ -2717,6 +2899,20 @@ async function handleClick(e){
     saveAttendanceFS(dk,sid,fn,an).catch(e=>toast("Save error: "+e.message,"error"));
     return;
   }
+  // Shopfloor marking
+  if(a==="mark-sf"){
+    const{sid,dk,val}=btn.dataset;
+    const numVal = val==="clear" ? null : parseFloat(val);
+    if(numVal!==null){
+      if(!S.shopfloor[dk])S.shopfloor[dk]={};
+      S.shopfloor[dk][sid]=numVal;
+    } else {
+      if(S.shopfloor[dk]) delete S.shopfloor[dk][sid];
+    }
+    refreshPage();
+    saveSFEntry(dk,sid,numVal).catch(e=>toast("Save error: "+e.message,"error"));
+    return;
+  }
   if(a==="generate-parent-link"){
     parentLinkModal();
     return;
@@ -2791,31 +2987,37 @@ async function handleClick(e){
 
   // Reports
   if(a==="load-monthly"){
-    // Sync print details from inputs before generating
     S.printDetails.name=(document.getElementById("pd-name")?.value||S.printDetails.name).trim();
     S.printDetails.position=document.getElementById("pd-pos")?.value||S.printDetails.position;
     S.printDetails.trade=(document.getElementById("pd-trade")?.value||S.printDetails.trade).trim();
     S.printDetails.printDate=document.getElementById("pd-date")?.checked??S.printDetails.printDate;
+    S.printDetails.includeSF=document.getElementById("pd-sf")?.checked??S.printDetails.includeSF;
     setLoading(true,"Generating report...");
     try{
-      // Load all attendance docs at once for accurate cumulative totals
       await loadAllAttendance();
-      const data=calcMonthlyReport(S.monthRep.batchId,S.monthRep.year,S.monthRep.month);
+      await loadShopfloor();
+      const includeSF=S.printDetails.includeSF;
+      const data=calcMonthlyReport(S.monthRep.batchId,S.monthRep.year,S.monthRep.month,includeSF);
       const b=S.batches.find(x=>x.id===S.monthRep.batchId);
       lastMonthlyData=data; lastMonthlyMeta={batch:b,month:S.monthRep.month,year:S.monthRep.year};
       const rows=data.map((s,i)=>{
         const pctCls=s.pct<PCT_WARN?"pct-critical":s.pct<PCT_WARN+5?"pct-warn":"pct-ok";
         const remark=s.pct<PCT_WARN?"Short attendance":"";
+        const sfCell=includeSF&&s.monthSF>0?`<span style="color:#b45309;font-size:10px">+${s.monthSF.toFixed(2)}SF</span>`:"";
         return`<tr><td>${i+1}</td><td>${s.adm}</td><td class="fw500" style="text-align:left">${s.name}</td>
-        <td>${s.monthPoss}</td><td>${s.monthPres}</td><td>${s.cumPoss}</td><td>${s.cumPres}</td>
+        <td>${s.monthPoss}</td><td>${s.monthPres} ${sfCell}</td>
+        ${includeSF?`<td style="font-size:10px;color:#b45309">${s.monthSF>0?"+"+s.monthSF.toFixed(2):"—"}</td>`:""}
+        <td>${s.cumPoss}</td><td>${s.cumPres}</td>
         <td class="${pctCls}">${s.pct}%</td><td style="font-size:11px;color:var(--danger)">${remark}</td></tr>`;
-      }).join("")||`<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">No data.</td></tr>`;
+      }).join("")||`<tr><td colspan="10" style="text-align:center;padding:24px;color:var(--text3)">No data.</td></tr>`;
       document.getElementById("monthly-result").innerHTML=`
 <div class="report-title"><strong>${S.profile?.institute||"Govt ITI Dhanuvachapuram"}</strong>
-<span class="text-sm text-muted" style="margin-left:10px">${b?b.name:""} &mdash; ${MONTHS[S.monthRep.month]} ${S.monthRep.year}</span></div>
+<span class="text-sm text-muted" style="margin-left:10px">${b?b.name:""} &mdash; ${MONTHS[S.monthRep.month]} ${S.monthRep.year}</span>
+${includeSF?'<span class="badge badge-accent" style="margin-left:8px;font-size:10px">+SF</span>':''}</div>
 <div style="overflow-x:auto"><table class="report-table"><thead><tr>
   <th>Sl</th><th>Adm No</th><th>Name</th>
   <th>Poss<br><small>(Month)</small></th><th>Present<br><small>(Month)</small></th>
+  ${includeSF?"<th>SF<br><small>(Month)</small></th>":""}
   <th>Cum.<br>Possible</th><th>Cum.<br>Present</th><th>%</th><th>Remark</th>
 </tr></thead><tbody>${rows}</tbody></table></div>`;
       const pb=document.getElementById("btn-print-monthly");
@@ -2827,15 +3029,17 @@ async function handleClick(e){
   if(a==="print-monthly"){printMonthlyReport();return;}
 
   if(a==="load-halfyear"){
-    // Sync print details from inputs before calculating
     S.printDetails.name=(document.getElementById("hr-pd-name")?.value||S.printDetails.name).trim();
     S.printDetails.position=document.getElementById("hr-pd-pos")?.value||S.printDetails.position;
     S.printDetails.trade=(document.getElementById("hr-pd-trade")?.value||S.printDetails.trade).trim();
     S.printDetails.printDate=document.getElementById("hr-pd-date")?.checked??S.printDetails.printDate;
+    S.printDetails.includeSF=document.getElementById("hr-pd-sf")?.checked??S.printDetails.includeSF;
     setLoading(true,"Calculating...");
     try{
       await loadAllAttendance();
-      const data=calcHalfYearReport(S.hrState.batchId,S.hrState.h1s,S.hrState.h1e,S.hrState.h2s,S.hrState.h2e);
+      await loadShopfloor();
+      const includeSF=S.printDetails.includeSF;
+      const data=calcHalfYearReport(S.hrState.batchId,S.hrState.h1s,S.hrState.h1e,S.hrState.h2s,S.hrState.h2e,includeSF);
       const b=S.batches.find(x=>x.id===S.hrState.batchId);
       lastHRData=data; lastHRMeta={batch:b,...S.hrState};
       const rows=data.map((s,i)=>{
