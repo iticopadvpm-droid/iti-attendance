@@ -417,6 +417,7 @@ const acdInstructorsRef = () => doc(db, userPath(), "_meta", "acd_instructors");
 const acdLinkRef        = () => doc(db, userPath(), "_meta", "acd_link");
 const acdLogRef         = () => doc(db, userPath(), "_meta", "acd_log");
 const pubAcdRef  = (token) => doc(db, "acdlinks", token);
+const acdMarksRef = (key) => doc(db, "acdmarks", key);
 
 // ============================================================
 // PIN HASH (SHA-256)
@@ -856,31 +857,25 @@ async function renderAcdAttendance(acd, state) {
   if(loginArea) loginArea.style.display = "none";
   if(area) {
     area.style.display = "block";
-    area.innerHTML = '<div style="text-align:center;padding:20px"><div class="spinner"></div><p style="color:#666;margin-top:10px">Loading attendance...</p></div>';
+    area.innerHTML = '<div style="text-align:center;padding:20px"><div class="spinner"></div><p style="color:#666;margin-top:10px">Loading...</p></div>';
   }
 
-  // Fetch batches and students for allowed batchIds
   try {
     const allowedBatchIds = acd.batchIds||[];
-    // Fetch from owner's Firestore
-    const [batchSnaps, studentSnap, attSnap] = await Promise.all([
-      Promise.all(allowedBatchIds.map(bid=>getDoc(doc(db,"instructors",ownerUid,"batches",bid)))),
-      getDocs(collection(db,"instructors",ownerUid,"students")),
-      getDoc(doc(db,"instructors",ownerUid,"attendance",dk))
-    ]);
+    // Use pre-loaded snapshot from public acdlinks doc — no auth needed
+    const batches = (linkData.batches||[]).filter(b=>allowedBatchIds.includes(b.id));
+    const students = (linkData.students||[]).filter(s=>allowedBatchIds.includes(s.batchId));
 
-    const batches = batchSnaps.filter(s=>s.exists()).map(s=>({id:s.id,...s.data()}));
-    const allStudents = studentSnap.docs.map(d=>({id:d.id,...d.data()}));
-    const students = allStudents.filter(s=>allowedBatchIds.includes(s.batchId));
-    const attData = attSnap.exists() ? attSnap.data() : {};
+    // Load today's attendance marks from public acdmarks collection
+    const marksSnap = await getDoc(doc(db,"acdmarks",state.linkData.token+"_"+dk));
+    const attData = marksSnap.exists() ? marksSnap.data() : {};
 
-    // Store in window state
     state.batches = batches;
     state.students = students;
     state.attData = attData;
-    state.ownerUid = ownerUid;
     state.acdName = acd.name;
     state.acdId = acd.id;
+    state.token = linkData.token;
 
     buildAcdAttendanceUI(state);
   } catch(e) {
@@ -940,31 +935,25 @@ ${cards}
   window.acdMark = async function(sid, val) {
     const now = Date.now();
     const cur = state.attData[sid]||{};
-    let record;
-    if(!cur.by) {
-      record = {fn:val,an:val,by:state.acdName,byId:state.acdId,at:now};
-    } else {
-      record = {...cur,fn:val,an:val,editedBy:state.acdName,editedById:state.acdId,editedAt:now};
-    }
+    const record = !cur.by
+      ? {fn:val,an:val,by:state.acdName,byId:state.acdId,at:now}
+      : {...cur,fn:val,an:val,editedBy:state.acdName,editedById:state.acdId,editedAt:now};
     state.attData[sid] = record;
     render();
 
-    // Save to Firestore under owner's account
     try {
-      const ref = doc(db,"instructors",state.ownerUid,"attendance",dk);
-      const snap = await getDoc(ref);
-      if(snap.exists()) {
-        await updateDoc(ref,{[sid]:record,_updated:now});
+      const marksKey = state.token+"_"+dk;
+      // Write to public acdmarks collection (public write allowed in rules)
+      const marksRef = doc(db,"acdmarks",marksKey);
+      const mSnap = await getDoc(marksRef);
+      if(mSnap.exists()){
+        await updateDoc(marksRef,{[sid]:record,_uid:state.ownerUid,_dk:dk,_updated:now});
       } else {
-        await setDoc(ref,{[sid]:record,_updated:now});
+        await setDoc(marksRef,{[sid]:record,_uid:state.ownerUid,_dk:dk,_updated:now,active:true});
       }
       saved = true;
       const msg = document.getElementById("acd-saved-msg");
       if(msg) msg.style.display="block";
-      // Log activity
-      const present2 = students.filter(s=>{ const a=state.attData[s.id]||{}; return isP(a.fn)&&isP(a.an); }).length;
-      const batch0 = batches.map(b=>b.name).join(", ");
-      await logAcdActivity(state.ownerUid,{name:state.acdName,batchName:batch0,count:present2,at:Date.now(),byId:state.acdId});
     } catch(e) {
       alert("Save error: "+e.message);
     }
@@ -1799,6 +1788,38 @@ const SF_VALUES = [
   {val:1.0,  label:"1", title:"Full day"}
 ];
 
+// Sync ACD marks from public acdmarks collection into instructor's attendance
+async function syncAcdMarks() {
+  if (!S.acdLink?.token) return;
+  const dk = `${S.attState.year}-${pad(S.attState.month+1)}-${pad(Math.min(S.attState.day,daysInMonth(S.attState.year,S.attState.month)))}`;
+  try {
+    const marksKey = S.acdLink.token+"_"+dk;
+    const snap = await getDoc(acdMarksRef(marksKey));
+    if (!snap.exists()) return;
+    const data = snap.data();
+    // Write each mark to instructor's real attendance collection
+    const attRef2 = attRef(dk);
+    const attSnap = await getDoc(attRef2);
+    const existing = attSnap.exists() ? attSnap.data() : {};
+    let changed = false;
+    Object.entries(data).forEach(([sid,rec])=>{
+      if(sid.startsWith("_")) return; // skip meta fields
+      if(!existing[sid] || JSON.stringify(existing[sid])!==JSON.stringify(rec)){
+        existing[sid] = rec;
+        if(!S.attendance[dk]) S.attendance[dk]={};
+        S.attendance[dk][sid] = rec;
+        changed = true;
+      }
+    });
+    if(changed){
+      existing._updated = Date.now();
+      if(attSnap.exists()) await updateDoc(attRef2, existing);
+      else await setDoc(attRef2, existing);
+      toast("ACD marks synced","info");
+    }
+  } catch(e) { /* silent - non critical */ }
+}
+
 async function loadShopfloor() {
   const snap = await getDocs(shopfloorRef());
   S.shopfloor = {};
@@ -2137,12 +2158,23 @@ async function generateAcdLink() {
     id:a.id, name:a.name, pinHash:a.pinHash,
     batchIds:a.batchIds||[], active:a.active
   }));
+  // Build batch + student snapshot for all allowed batches
+  const allBatchIds = [...new Set(S.acdInstructors.flatMap(a=>a.batchIds||[]))];
+  const batchSnapshot = S.batches
+    .filter(b=>allBatchIds.includes(b.id))
+    .map(b=>({id:b.id,name:b.name,trade:b.trade,year:b.year}));
+  const studentSnapshot = S.students
+    .filter(s=>allBatchIds.includes(s.batchId))
+    .map(s=>({id:s.id,adm:s.adm,name:s.name,batchId:s.batchId}));
+
   const payload = {
     token,
     uid: S.user.uid,
     inst: S.profile?.institute||"Govt ITI Dhanuvachapuram",
     instrName: S.profile?.name||"",
     acdList: safeList,
+    batches: batchSnapshot,
+    students: studentSnapshot,
     created: Date.now(),
     active: true
   };
@@ -3266,6 +3298,7 @@ async function loadAttPageData(){
   setLoading(true);
   try{
     await Promise.all([loadStudents(), loadAttendanceMonth(S.attState.year,S.attState.month)]);
+    await syncAcdMarks(); // pull ACD marks into real attendance
     if(!S.attState.batchId&&S.batches.length) S.attState.batchId=S.batches[0].id;
     refreshPage();
   }catch(e){toast(e.message,"error");refreshPage();}
