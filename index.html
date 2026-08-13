@@ -887,80 +887,144 @@ function buildAcdAttendanceUI(state) {
   const {batches, students, attData, acdName, dk} = state;
   const isP = v=>v==="P"||v==="Pe";
   const SESS = ["P","A","Pe","CL","ML"];
-  const btnColor = {P:"background:#dcfce7;color:#15803d;border-color:#86efac",A:"background:#fee2e2;color:#dc2626;border-color:#fca5a5",Pe:"background:#f3e8ff;color:#7c3aed;border-color:#c4b5fd",CL:"background:#dbeafe;color:#1d4ed8;border-color:#93c5fd",ML:"background:#fef3c7;color:#b45309;border-color:#fcd34d"};
+  const btnStyle = {
+    P:"background:#dcfce7;color:#15803d;border-color:#86efac",
+    A:"background:#fee2e2;color:#dc2626;border-color:#fca5a5",
+    Pe:"background:#f3e8ff;color:#7c3aed;border-color:#c4b5fd",
+    CL:"background:#dbeafe;color:#1d4ed8;border-color:#93c5fd",
+    ML:"background:#fef3c7;color:#b45309;border-color:#fcd34d"
+  };
   const area = document.getElementById("acd-att-area");
   let saved = false;
+  // Track expanded cards
+  const expanded = {};
+
+  function chipFor(val) {
+    if(!val) return "";
+    return '<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;border:1px solid #e5e7eb;'+btnStyle[val]+'">'+val+'</span>';
+  }
+
+  function statusChip(fn,an) {
+    if(!fn&&!an) return '<span style="font-size:11px;color:#9ca3af;font-style:italic">—</span>';
+    if(fn===an) return chipFor(fn);
+    return chipFor(fn)+'<span style="font-size:10px;color:#9ca3af;margin:0 2px">+</span>'+chipFor(an);
+  }
+
+  function buildBtns(sid, sess) {
+    // sess = "both"|"fn"|"an"
+    const att = state.attData[sid]||{fn:"",an:""};
+    return SESS.map(v=>{
+      const fn=att.fn||"", an=att.an||"";
+      const active = sess==="both" ? (fn===v&&an===v) : sess==="fn" ? fn===v : an===v;
+      return '<button onclick="acdMarkSess(\''+sid+'\',\''+sess+'\',\''+v+'\')" '
+        +'style="padding:5px 9px;border-radius:6px;border:1px solid #e5e7eb;font-size:12px;font-weight:600;cursor:pointer;'+(active?btnStyle[v]:"")+'">'
+        +v+'</button>';
+    }).join("");
+  }
 
   function render() {
     const cards = students.map((s,idx)=>{
       const att = state.attData[s.id]||{fn:"",an:""};
-      const fn=att.fn||"",an=att.an||"";
-      let chip="";
-      if(fn===an&&fn) chip=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;${btnColor[fn]||""}">${fn}</span>`;
-      else if(fn&&an) chip=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;${btnColor[fn]||""}">${fn}</span>+<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;${btnColor[an]||""}">${an}</span>`;
-      else chip=`<span style="font-size:11px;color:#9ca3af;font-style:italic">—</span>`;
-      const btns = SESS.map(v=>{
-        const active=fn===v&&an===v;
-        return `<button onclick="acdMark('${s.id}','${v}')" style="padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;font-size:12px;font-weight:600;cursor:pointer;${active?btnColor[v]:""}">${v}</button>`;
-      }).join("");
+      const fn=att.fn||"", an=att.an||"";
+      const chip = statusChip(fn, an);
       const batch = batches.find(b=>b.id===s.batchId);
-      return `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;overflow:hidden">
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px">
-          <span style="font-size:13px;font-weight:700;background:#f0f4f8;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${idx+1}</span>
-          <div style="flex:1"><div style="font-weight:600;font-size:14px">${s.name}</div>
-          <div style="font-size:10px;color:#9ca3af">${batch?.name||""}</div></div>
-          ${chip}
-        </div>
-        <div style="padding:8px 12px 10px;border-top:1px solid #f3f4f6;display:flex;gap:6px;flex-wrap:wrap">${btns}</div>
-      </div>`;
+      const isExp = !!expanded[s.id];
+      const byLine = att.by
+        ? '<span style="font-size:10px;color:#9ca3af;display:block;margin-top:1px">📝 '+att.by+(att.editedBy?' ✏️ '+att.editedBy:'')+'</span>'
+        : '';
+
+      const quickBtns = buildBtns(s.id,"both");
+      const fnBtns   = buildBtns(s.id,"fn");
+      const anBtns   = buildBtns(s.id,"an");
+
+      return '<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;overflow:hidden">'
+        // Header row
+        +'<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer" onclick="acdToggle(\''+s.id+'\')">'
+          +'<span style="font-size:13px;font-weight:700;background:#f0f4f8;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+( idx+1)+'</span>'
+          +'<div style="flex:1"><div style="font-weight:600;font-size:14px">'+s.name+'</div>'
+          +(batch?'<div style="font-size:10px;color:#9ca3af">'+batch.name+'</div>':'')
+          +byLine+'</div>'
+          +chip
+          +'<span style="color:#9ca3af;font-size:12px;margin-left:6px">'+(isExp?'▴':'▾')+'</span>'
+        +'</div>'
+        // Quick mark row (always visible)
+        +'<div style="padding:8px 12px 10px;border-top:1px solid #f3f4f6;display:flex;gap:6px;flex-wrap:wrap">'
+          +quickBtns
+        +'</div>'
+        // Expanded FN/AN rows
+        +(isExp
+          ? '<div style="padding:8px 12px 10px;border-top:1px solid #f3f4f6;background:#f8fafc">'
+              +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
+                +'<span style="font-size:11px;font-weight:700;color:#6b7280;width:24px">FN</span>'
+                +fnBtns
+              +'</div>'
+              +'<div style="display:flex;align-items:center;gap:6px">'
+                +'<span style="font-size:11px;font-weight:700;color:#6b7280;width:24px">AN</span>'
+                +anBtns
+              +'</div>'
+            +'</div>'
+          : '')
+        +'</div>';
     }).join("");
 
-    const present = students.filter(s=>{const a=state.attData[s.id]||{};return isP(a.fn)&&isP(a.an);}).length;
+    const present  = students.filter(s=>{const a=state.attData[s.id]||{};return isP(a.fn)&&isP(a.an);}).length;
     const unmarked = students.filter(s=>!state.attData[s.id]?.fn).length;
 
-    area.innerHTML = `
-<div style="margin-bottom:10px;padding:8px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;display:flex;gap:12px;flex-wrap:wrap">
-  <span>Present: <strong style="color:#16a34a">${present}</strong></span>
-  <span>Unmarked: <strong style="color:#d97706">${unmarked}</strong></span>
-  <span>Total: <strong>${students.length}</strong></span>
-  <span style="margin-left:auto;color:#9ca3af;font-size:11px">${dk}</span>
-</div>
-<div style="font-size:11px;color:#6b7280;margin-bottom:10px">Marking as: <strong>${acdName}</strong></div>
-${cards}
-<div style="text-align:center;margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:13px;color:#15803d;display:${saved?"block":"none"}" id="acd-saved-msg">
-  ✅ Attendance saved successfully!
-</div>`;
+    area.innerHTML =
+      '<div style="margin-bottom:10px;padding:8px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;display:flex;gap:12px;flex-wrap:wrap">'
+        +'<span>Present: <strong style="color:#16a34a">'+present+'</strong></span>'
+        +'<span>Unmarked: <strong style="color:#d97706">'+unmarked+'</strong></span>'
+        +'<span>Total: <strong>'+students.length+'</strong></span>'
+        +'<span style="margin-left:auto;color:#9ca3af;font-size:11px">'+dk+'</span>'
+      +'</div>'
+      +'<div style="font-size:11px;color:#6b7280;margin-bottom:8px">Marking as: <strong>'+acdName+'</strong> &nbsp;·&nbsp; Tap ▾ to mark FN/AN separately</div>'
+      +cards
+      +'<div id="acd-saved-msg" style="text-align:center;margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:13px;color:#15803d;display:'+(saved?"block":"none")+'">'
+        +'✅ Attendance saved successfully!'
+      +'</div>';
   }
 
-  window.acdMark = async function(sid, val) {
-    const now = Date.now();
-    const cur = state.attData[sid]||{};
-    const record = !cur.by
-      ? {fn:val,an:val,by:state.acdName,byId:state.acdId,at:now}
-      : {...cur,fn:val,an:val,editedBy:state.acdName,editedById:state.acdId,editedAt:now};
-    state.attData[sid] = record;
+  window.acdToggle = function(sid) {
+    expanded[sid] = !expanded[sid];
     render();
+  };
 
+  async function saveRecord(sid, record) {
+    const now = Date.now();
     try {
       const marksKey = state.token+"_"+dk;
-      // Write to public acdmarks collection (public write allowed in rules)
       const marksRef = doc(db,"acdmarks",marksKey);
       const mSnap = await getDoc(marksRef);
-      if(mSnap.exists()){
-        await updateDoc(marksRef,{[sid]:record,_uid:state.ownerUid,_dk:dk,_updated:now});
-      } else {
-        await setDoc(marksRef,{[sid]:record,_uid:state.ownerUid,_dk:dk,_updated:now,active:true});
-      }
+      const upd = {[sid]:record,_uid:state.ownerUid,_dk:dk,_updated:now};
+      if(mSnap.exists()) await updateDoc(marksRef,upd);
+      else await setDoc(marksRef,{...upd,active:true});
       saved = true;
       const msg = document.getElementById("acd-saved-msg");
       if(msg) msg.style.display="block";
-    } catch(e) {
-      alert("Save error: "+e.message);
-    }
+    } catch(e) { alert("Save error: "+e.message); }
+  }
+
+  window.acdMarkSess = async function(sid, sess, val) {
+    const now = Date.now();
+    const cur = state.attData[sid]||{fn:"",an:""};
+    let fn = cur.fn||"", an = cur.an||"";
+    if(sess==="both"){ fn=val; an=val; }
+    else if(sess==="fn") fn=val;
+    else if(sess==="an") an=val;
+    const record = !cur.by
+      ? {fn,an,by:state.acdName,byId:state.acdId,at:now}
+      : {...cur,fn,an,editedBy:state.acdName,editedById:state.acdId,editedAt:now};
+    state.attData[sid] = record;
+    render();
+    await saveRecord(sid, record);
   };
+
+  // Keep old acdMark for compatibility
+  window.acdMark = function(sid, val) { window.acdMarkSess(sid,"both",val); };
 
   render();
 }
+
 
 // =====================================================
 // PARENT VIEW — public read-only page
