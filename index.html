@@ -383,6 +383,9 @@ let S = {
   syncStatus: "ok",     // ok | syncing | error
   holidays: {},         // { "YYYY-MM-DD": { name: "Onam" } }
   shopfloor: {},        // { "YYYY-MM-DD": { studentId: 0.25|0.33|0.5|1.0 } }
+  acdInstructors: [],   // [{id,name,pinHash,batchIds,active}]
+  acdLink: null,        // {token, created}
+  acdLog: [],           // [{name,batchName,count,at,byId}]
   // print overrides (editable on report pages, not saved to profile)
   printDetails: { name:"", position:"SI", trade:"", printDate:true, includeSF:true }
 };
@@ -409,6 +412,11 @@ const parentLinkRef = () => doc(db, userPath(), "_meta", "parentlink");
 // Parent view data stored in public top-level collection
 const pubLinkRef = (token) => doc(db, "parentlinks", token);
 const pubLinkCol = () => collection(db, "parentlinks");
+// ACD refs
+const acdInstructorsRef = () => doc(db, userPath(), "_meta", "acd_instructors");
+const acdLinkRef        = () => doc(db, userPath(), "_meta", "acd_link");
+const acdLogRef         = () => doc(db, userPath(), "_meta", "acd_log");
+const pubAcdRef  = (token) => doc(db, "acdlinks", token);
 
 // ============================================================
 // PIN HASH (SHA-256)
@@ -516,27 +524,32 @@ async function loadAttendanceMonth(year, month) {
   });
 }
 
-async function saveAttendanceFS(dk, sid, fn, an) {
+async function saveAttendanceFS(dk, sid, fn, an, meta) {
   setSyncStatus("syncing");
   try {
     const ref = attRef(dk);
+    const record = meta ? meta : {fn, an};
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      await updateDoc(ref, { [sid]: {fn, an}, _updated: Date.now() });
+      await updateDoc(ref, { [sid]: record, _updated: Date.now() });
     } else {
-      await setDoc(ref, { [sid]: {fn, an}, _updated: Date.now() });
+      await setDoc(ref, { [sid]: record, _updated: Date.now() });
     }
     setSyncStatus("ok");
   } catch(e) { setSyncStatus("error"); throw e; }
 }
 
-async function markAllFS(dk, studentIds, fn, an) {
+
+async function markAllFS(dk, studentIds, fn, an, lbl) {
   setSyncStatus("syncing");
   try {
     const ref = attRef(dk);
-    const updates = { _updated: Date.now() };
-    studentIds.forEach(sid => updates[sid] = {fn, an});
     const snap = await getDoc(ref);
+    const existing = snap.exists() ? snap.data() : {};
+    const updates = { _updated: Date.now() };
+    studentIds.forEach(sid => {
+      updates[sid] = lbl ? buildAttRecord(fn,an,lbl.name,lbl.id,existing[sid]||{}) : {fn,an};
+    });
     if (snap.exists()) {
       await updateDoc(ref, updates);
     } else {
@@ -545,6 +558,8 @@ async function markAllFS(dk, studentIds, fn, an) {
     setSyncStatus("ok");
   } catch(e) { setSyncStatus("error"); throw e; }
 }
+
+
 
 // ============================================================
 // REPORT CALCULATIONS (client-side from cached S.attendance)
@@ -699,6 +714,266 @@ function closeModal(){ document.getElementById("modal-slot").innerHTML=""; }
 
 
 // =====================================================
+// ACD VIEW — attendance marking for ACD instructors
+// =====================================================
+async function checkAcdView() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('acd');
+  if (!token) return false;
+
+  const root = document.getElementById("root");
+  root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9"><div style="text-align:center;padding:40px"><div class="spinner"></div><p style="margin-top:12px;color:#666">Loading...</p></div></div>';
+
+  try {
+    const snap = await getDoc(pubAcdRef(token));
+    if (!snap.exists() || !snap.data().active) {
+      root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;font-family:sans-serif"><div style="text-align:center;padding:40px"><div style="font-size:48px">🔗</div><h2 style="margin:16px 0 8px">Link Expired</h2><p style="color:#666">This ACD link is no longer active. Ask your instructor for a new link.</p></div></div>';
+      return true;
+    }
+    renderAcdLogin(snap.data());
+  } catch(e) {
+    root.innerHTML = '<div style="text-align:center;padding:60px;font-family:sans-serif"><h2>Error</h2><p style="color:#666">'+e.message+'</p></div>';
+  }
+  return true;
+}
+
+function renderAcdLogin(linkData) {
+  const root = document.getElementById("root");
+  const {inst, uid: ownerUid, instrName} = linkData;
+
+  // We need to fetch ACD instructors list - stored in owner's private collection
+  // We do this via a public-readable copy stored alongside the acdlink
+  const acdList = linkData.acdList || [];
+
+  if (acdList.length === 0) {
+    root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;font-family:sans-serif"><div style="text-align:center;padding:40px"><h2>No ACD Instructors</h2><p style="color:#666">Ask your instructor to add ACD instructor accounts in Settings.</p></div></div>';
+    return;
+  }
+
+  const today = new Date();
+  const todayStr = today.toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  const dk = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+
+  root.innerHTML = `
+<div style="max-width:420px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+  <div style="background:#1e40af;color:#fff;padding:20px 16px">
+    <div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">ACD Attendance</div>
+    <div style="font-size:18px;font-weight:700">${inst}</div>
+    <div style="font-size:12px;opacity:.8;margin-top:4px">📅 ${todayStr}</div>
+  </div>
+  <div style="padding:20px 16px">
+    <div id="acd-login-area">
+      <p style="font-size:14px;color:#374151;margin-bottom:16px">Select your name and enter your PIN:</p>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+        ${acdList.filter(a=>a.active).map(a=>`
+        <button onclick="selectAcdUser('${a.id}','${a.name}')"
+          style="padding:14px 16px;border:2px solid #e5e7eb;border-radius:10px;background:#fff;text-align:left;cursor:pointer;font-size:14px;font-weight:600;color:#374151"
+          id="acd-btn-${a.id}">
+          👤 ${a.name}
+        </button>`).join("")}
+      </div>
+      <div id="acd-pin-area" style="display:none">
+        <p style="font-size:13px;color:#6b7280;margin-bottom:12px">Enter PIN for <strong id="acd-selected-name"></strong>:</p>
+        <div style="display:flex;gap:12px;justify-content:center;margin-bottom:16px">
+          <div id="acd-pin-dot-0" style="width:14px;height:14px;border-radius:50%;background:#e5e7eb;border:2px solid #d1d5db"></div>
+          <div id="acd-pin-dot-1" style="width:14px;height:14px;border-radius:50%;background:#e5e7eb;border:2px solid #d1d5db"></div>
+          <div id="acd-pin-dot-2" style="width:14px;height:14px;border-radius:50%;background:#e5e7eb;border:2px solid #d1d5db"></div>
+          <div id="acd-pin-dot-3" style="width:14px;height:14px;border-radius:50%;background:#e5e7eb;border:2px solid #d1d5db"></div>
+        </div>
+        <div id="acd-pin-err" style="text-align:center;color:#dc2626;font-size:12px;margin-bottom:10px;display:none">Incorrect PIN</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:220px;margin:0 auto">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''?'<div></div>':`<button onclick="acdPinKey('${k}')" style="padding:14px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;font-size:18px;font-weight:600;cursor:pointer;color:#1f2937">${k}</button>`).join('')}
+        </div>
+        <button onclick="cancelAcdSelect()" style="display:block;margin:16px auto 0;background:none;border:none;color:#6b7280;cursor:pointer;font-size:13px">← Back</button>
+      </div>
+    </div>
+    <div id="acd-att-area" style="display:none"></div>
+  </div>
+</div>`;
+
+  // ACD state
+  window._acdState = { linkData, dk, ownerUid, selectedId: null, selectedName: null, pinBuf: "" };
+
+  window.selectAcdUser = function(id, name) {
+    window._acdState.selectedId = id;
+    window._acdState.selectedName = name;
+    window._acdState.pinBuf = "";
+    document.getElementById("acd-selected-name").textContent = name;
+    document.getElementById("acd-pin-area").style.display = "block";
+    document.querySelectorAll("[id^='acd-btn-']").forEach(b=>b.style.opacity="0.4");
+    updateAcdDots();
+  };
+
+  window.cancelAcdSelect = function() {
+    window._acdState.selectedId = null;
+    window._acdState.pinBuf = "";
+    document.getElementById("acd-pin-area").style.display = "none";
+    document.querySelectorAll("[id^='acd-btn-']").forEach(b=>b.style.opacity="1");
+    updateAcdDots();
+  };
+
+  function updateAcdDots() {
+    const buf = window._acdState.pinBuf;
+    for(let i=0;i<4;i++){
+      const dot = document.getElementById("acd-pin-dot-"+i);
+      if(dot) dot.style.background = i<buf.length ? "#1e40af" : "#e5e7eb";
+    }
+  }
+
+  window.acdPinKey = async function(k) {
+    const state = window._acdState;
+    if(!state.selectedId) return;
+    if(k==="⌫") state.pinBuf = state.pinBuf.slice(0,-1);
+    else if(state.pinBuf.length<4) state.pinBuf += k;
+    updateAcdDots();
+
+    if(state.pinBuf.length===4) {
+      const hash = await hashPinStandalone(state.pinBuf);
+      const acd = state.linkData.acdList.find(a=>a.id===state.selectedId);
+      if(hash === acd?.pinHash) {
+        // Authenticated — show attendance
+        document.getElementById("acd-pin-err").style.display = "none";
+        renderAcdAttendance(acd, state);
+      } else {
+        state.pinBuf = "";
+        updateAcdDots();
+        const err = document.getElementById("acd-pin-err");
+        if(err) { err.style.display="block"; setTimeout(()=>err.style.display="none",2000); }
+      }
+    }
+  };
+}
+
+async function hashPinStandalone(pin) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+async function renderAcdAttendance(acd, state) {
+  const {linkData, dk, ownerUid} = state;
+  const area = document.getElementById("acd-att-area");
+  const loginArea = document.getElementById("acd-login-area");
+  if(loginArea) loginArea.style.display = "none";
+  if(area) {
+    area.style.display = "block";
+    area.innerHTML = '<div style="text-align:center;padding:20px"><div class="spinner"></div><p style="color:#666;margin-top:10px">Loading attendance...</p></div>';
+  }
+
+  // Fetch batches and students for allowed batchIds
+  try {
+    const allowedBatchIds = acd.batchIds||[];
+    // Fetch from owner's Firestore
+    const [batchSnaps, studentSnap, attSnap] = await Promise.all([
+      Promise.all(allowedBatchIds.map(bid=>getDoc(doc(db,"instructors",ownerUid,"batches",bid)))),
+      getDocs(collection(db,"instructors",ownerUid,"students")),
+      getDoc(doc(db,"instructors",ownerUid,"attendance",dk))
+    ]);
+
+    const batches = batchSnaps.filter(s=>s.exists()).map(s=>({id:s.id,...s.data()}));
+    const allStudents = studentSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const students = allStudents.filter(s=>allowedBatchIds.includes(s.batchId));
+    const attData = attSnap.exists() ? attSnap.data() : {};
+
+    // Store in window state
+    state.batches = batches;
+    state.students = students;
+    state.attData = attData;
+    state.ownerUid = ownerUid;
+    state.acdName = acd.name;
+    state.acdId = acd.id;
+
+    buildAcdAttendanceUI(state);
+  } catch(e) {
+    if(area) area.innerHTML = '<p style="color:#dc2626;text-align:center;padding:20px">Error: '+e.message+'</p>';
+  }
+}
+
+function buildAcdAttendanceUI(state) {
+  const {batches, students, attData, acdName, dk} = state;
+  const isP = v=>v==="P"||v==="Pe";
+  const SESS = ["P","A","Pe","CL","ML"];
+  const btnColor = {P:"background:#dcfce7;color:#15803d;border-color:#86efac",A:"background:#fee2e2;color:#dc2626;border-color:#fca5a5",Pe:"background:#f3e8ff;color:#7c3aed;border-color:#c4b5fd",CL:"background:#dbeafe;color:#1d4ed8;border-color:#93c5fd",ML:"background:#fef3c7;color:#b45309;border-color:#fcd34d"};
+  const area = document.getElementById("acd-att-area");
+  let saved = false;
+
+  function render() {
+    const cards = students.map((s,idx)=>{
+      const att = state.attData[s.id]||{fn:"",an:""};
+      const fn=att.fn||"",an=att.an||"";
+      let chip="";
+      if(fn===an&&fn) chip=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;${btnColor[fn]||""}">${fn}</span>`;
+      else if(fn&&an) chip=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;${btnColor[fn]||""}">${fn}</span>+<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:12px;${btnColor[an]||""}">${an}</span>`;
+      else chip=`<span style="font-size:11px;color:#9ca3af;font-style:italic">—</span>`;
+      const btns = SESS.map(v=>{
+        const active=fn===v&&an===v;
+        return `<button onclick="acdMark('${s.id}','${v}')" style="padding:6px 10px;border-radius:6px;border:1px solid #e5e7eb;font-size:12px;font-weight:600;cursor:pointer;${active?btnColor[v]:""}">${v}</button>`;
+      }).join("");
+      const batch = batches.find(b=>b.id===s.batchId);
+      return `<div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;margin-bottom:8px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px">
+          <span style="font-size:13px;font-weight:700;background:#f0f4f8;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${idx+1}</span>
+          <div style="flex:1"><div style="font-weight:600;font-size:14px">${s.name}</div>
+          <div style="font-size:10px;color:#9ca3af">${batch?.name||""}</div></div>
+          ${chip}
+        </div>
+        <div style="padding:8px 12px 10px;border-top:1px solid #f3f4f6;display:flex;gap:6px;flex-wrap:wrap">${btns}</div>
+      </div>`;
+    }).join("");
+
+    const present = students.filter(s=>{const a=state.attData[s.id]||{};return isP(a.fn)&&isP(a.an);}).length;
+    const unmarked = students.filter(s=>!state.attData[s.id]?.fn).length;
+
+    area.innerHTML = `
+<div style="margin-bottom:10px;padding:8px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;display:flex;gap:12px;flex-wrap:wrap">
+  <span>Present: <strong style="color:#16a34a">${present}</strong></span>
+  <span>Unmarked: <strong style="color:#d97706">${unmarked}</strong></span>
+  <span>Total: <strong>${students.length}</strong></span>
+  <span style="margin-left:auto;color:#9ca3af;font-size:11px">${dk}</span>
+</div>
+<div style="font-size:11px;color:#6b7280;margin-bottom:10px">Marking as: <strong>${acdName}</strong></div>
+${cards}
+<div style="text-align:center;margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:13px;color:#15803d;display:${saved?"block":"none"}" id="acd-saved-msg">
+  ✅ Attendance saved successfully!
+</div>`;
+  }
+
+  window.acdMark = async function(sid, val) {
+    const now = Date.now();
+    const cur = state.attData[sid]||{};
+    let record;
+    if(!cur.by) {
+      record = {fn:val,an:val,by:state.acdName,byId:state.acdId,at:now};
+    } else {
+      record = {...cur,fn:val,an:val,editedBy:state.acdName,editedById:state.acdId,editedAt:now};
+    }
+    state.attData[sid] = record;
+    render();
+
+    // Save to Firestore under owner's account
+    try {
+      const ref = doc(db,"instructors",state.ownerUid,"attendance",dk);
+      const snap = await getDoc(ref);
+      if(snap.exists()) {
+        await updateDoc(ref,{[sid]:record,_updated:now});
+      } else {
+        await setDoc(ref,{[sid]:record,_updated:now});
+      }
+      saved = true;
+      const msg = document.getElementById("acd-saved-msg");
+      if(msg) msg.style.display="block";
+      // Log activity
+      const present2 = students.filter(s=>{ const a=state.attData[s.id]||{}; return isP(a.fn)&&isP(a.an); }).length;
+      const batch0 = batches.map(b=>b.name).join(", ");
+      await logAcdActivity(state.ownerUid,{name:state.acdName,batchName:batch0,count:present2,at:Date.now(),byId:state.acdId});
+    } catch(e) {
+      alert("Save error: "+e.message);
+    }
+  };
+
+  render();
+}
+
+// =====================================================
 // PARENT VIEW — public read-only page
 // =====================================================
 async function checkParentView() {
@@ -786,9 +1061,12 @@ function renderParentView(data) {
 // ============================================================
 // AUTH STATE
 // ============================================================
-// Check if this is a parent view request first
+// Check if this is a parent/ACD view request first
 checkParentView().then(isParentView => {
-  if (isParentView) return; // Don't init auth flow for parent view
+  if (isParentView) return;
+  return checkAcdView();
+}).then(isAcdView => {
+  if (isAcdView) return;
 
   onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -822,17 +1100,9 @@ checkParentView().then(isParentView => {
       renderLogin();
     }
   }); // end onAuthStateChanged
-}); // end checkParentView
+}); // end checkParentView/ACD
 
-// ============================================================
-// RENDER ROOT
-// ============================================================
-function renderRoot(){
-  if (!S.user)       { renderLogin(); return; }
-  if (!S.profile)    { renderProfileSetup(); return; }
-  if (!S.isUnlocked) { renderPin(""); return; }
-  renderApp();
-}
+// renderRoot() removed — auth handled directly by onAuthStateChanged
 
 // ============================================================
 // LOGIN SCREEN — Email / Password
@@ -1079,7 +1349,7 @@ async function submitPin(){
 // LOAD ALL DATA
 // ============================================================
 async function loadAll(){
-  await Promise.all([loadBatches(), loadStudents(), loadShopfloor()]);
+  await Promise.all([loadBatches(), loadStudents(), loadShopfloor(), loadAcdData()]);
   // Load this month's attendance
   await loadAttendanceMonth(S.attState.year, S.attState.month);
   // Set defaults
@@ -1165,6 +1435,7 @@ function bindApp(){
       else if(pg==="students") loadStudentsPageData();
       else if(pg==="attbook") loadAttBookData();
       else if(pg==="shopfloor") loadShopfloorData();
+      else if(pg==="settings") loadAcdData().then(()=>refreshPage());
       else refreshPage();
       // Close mobile sidebar after navigation
       document.getElementById("main-sidebar")?.classList.remove("mobile-open");
@@ -1205,6 +1476,26 @@ function renderPage(){
 // DASHBOARD
 // ============================================================
 function renderDashboard(){
+  // ACD activity notification
+  const todayDk = `${TODAY.getFullYear()}-${pad(TODAY.getMonth()+1)}-${pad(TODAY.getDate())}`;
+  const todayAcd = (S.acdLog||[]).filter(e=>{
+    if(!e.at) return false;
+    const d=new Date(e.at);
+    return d.toDateString()===TODAY.toDateString();
+  });
+  const acdNotif = todayAcd.length>0 ? `
+<div class="card mb16" style="border-left:4px solid #2563eb">
+  <div class="card-header"><h3>🔔 ACD Activity Today</h3></div>
+  <div class="card-body" style="padding:0">
+    ${todayAcd.map(e=>{
+      const t=e.at?new Date(e.at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):"";
+      return '<div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px">'
+        +'<span class="fw500">'+e.name+'</span> marked <strong>'+e.count+'</strong> students'
+        +' in <strong>'+e.batchName+'</strong>'
+        +' <span style="color:var(--text3)">at '+t+'</span></div>';
+    }).join("")}
+  </div>
+</div>` : "";
   const totalSt=S.students.length, totalB=S.batches.length;
   const dk=fmtDate(TODAY);
   const todayAtt=S.attendance[dk]||{};
@@ -1224,7 +1515,7 @@ function renderDashboard(){
     const cnt=S.students.filter(s=>s.batchId===b.id).length;
     return`<tr><td class="fw500">${b.name}</td><td>${b.trade}</td><td>${b.year}</td><td>${cnt}</td></tr>`;
   }).join("")||`<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text3)">No batches yet</td></tr>`;
-  return`
+  return acdNotif+`
 <div class="grid4 mb20">
   <div class="stat-card"><div class="stat-val text-accent">${totalB}</div><div class="stat-lbl">Batches</div></div>
   <div class="stat-card"><div class="stat-val">${totalSt}</div><div class="stat-lbl">Students</div></div>
@@ -1332,10 +1623,14 @@ function renderAttendance(){
     const fnBtns=SESS.map(v=>`<button class="att-quick-btn ${fn===v?v:""}" style="padding:5px 9px;font-size:12px" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="fn" data-val="${v}">${v}</button>`).join("");
     const anBtns=SESS.map(v=>`<button class="att-quick-btn ${an===v?v:""}" style="padding:5px 9px;font-size:12px" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="an" data-val="${v}">${v}</button>`).join("");
 
+    const byLine = attByLine(att);
     return`<div class="att-mobile-card">
   <div class="att-mobile-header" data-action="toggle-expand" data-sid="${s.id}">
     <span class="att-mobile-sl">${idx+1}</span>
-    <span class="att-mobile-name">${s.name}</span>
+    <div style="flex:1;min-width:0">
+      <span class="att-mobile-name">${s.name}</span>
+      ${byLine}
+    </div>
     <span class="att-mobile-status">${chip}</span>
     <span class="att-mobile-expand" id="exp-arrow-${s.id}">▾</span>
   </div>
@@ -1816,12 +2111,169 @@ function renderAttBook() {
 }
 
 // ============================================================
+// ACD INSTRUCTOR FUNCTIONS
+// ============================================================
+async function loadAcdData() {
+  try {
+    const [instSnap, linkSnap, logSnap] = await Promise.all([
+      getDoc(acdInstructorsRef()),
+      getDoc(acdLinkRef()),
+      getDoc(acdLogRef())
+    ]);
+    S.acdInstructors = instSnap.exists() ? (instSnap.data().list||[]) : [];
+    S.acdLink = linkSnap.exists() ? linkSnap.data() : null;
+    S.acdLog = logSnap.exists() ? (logSnap.data().entries||[]) : [];
+  } catch(e) { /* silent */ }
+}
+
+async function saveAcdInstructors() {
+  await setDoc(acdInstructorsRef(), { list: S.acdInstructors });
+}
+
+async function generateAcdLink() {
+  const token = genToken();
+  // Only store name, pinHash, batchIds, active — never expose raw PIN
+  const safeList = S.acdInstructors.map(a=>({
+    id:a.id, name:a.name, pinHash:a.pinHash,
+    batchIds:a.batchIds||[], active:a.active
+  }));
+  const payload = {
+    token,
+    uid: S.user.uid,
+    inst: S.profile?.institute||"Govt ITI Dhanuvachapuram",
+    instrName: S.profile?.name||"",
+    acdList: safeList,
+    created: Date.now(),
+    active: true
+  };
+  await Promise.all([
+    setDoc(acdLinkRef(), { token, created: Date.now() }),
+    setDoc(pubAcdRef(token), payload)
+  ]);
+  S.acdLink = { token, created: Date.now() };
+  return token;
+}
+
+async function revokeAcdLink() {
+  if (!S.acdLink?.token) return;
+  await setDoc(pubAcdRef(S.acdLink.token), { active: false }, { merge: true });
+  await setDoc(acdLinkRef(), { token: S.acdLink.token, active: false, created: S.acdLink.created });
+  S.acdLink = null;
+}
+
+// Called from ACD page after marking — logs activity to instructor's Firestore
+async function logAcdActivity(uid, entry) {
+  // entry: {name, batchName, count, at, byId}
+  const ref = doc(db, "instructors", uid, "_meta", "acd_log");
+  const snap = await getDoc(ref);
+  const existing = snap.exists() ? (snap.data().entries||[]) : [];
+  // Keep last 50 entries
+  const updated = [entry, ...existing].slice(0, 50);
+  await setDoc(ref, { entries: updated });
+}
+
+// Attendance marking with "by" metadata
+function buildAttRecord(fn, an, byName, byId, existing) {
+  const now = Date.now();
+  if (!existing || (!existing.by)) {
+    // First mark
+    return { fn, an, by: byName, byId, at: now };
+  } else {
+    // Edit
+    return { fn, an,
+      by: existing.by, byId: existing.byId, at: existing.at,
+      editedBy: byName, editedById: byId, editedAt: now
+    };
+  }
+}
+
+function attByLine(rec) {
+  if (!rec || !rec.by) return "";
+  const byTime = rec.at ? new Date(rec.at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}) : "";
+  let line = `<span style="font-size:10px;color:var(--text3);margin-top:2px;display:block">📝 ${rec.by}${byTime?" — "+byTime:""}</span>`;
+  if (rec.editedBy) {
+    const et = rec.editedAt ? new Date(rec.editedAt).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}) : "";
+    line += `<span style="font-size:10px;color:#b45309;display:block">✏️ Edited: ${rec.editedBy}${et?" — "+et:""}</span>`;
+  }
+  return line;
+}
+
+// Get current user label for marking
+function currentUserLabel() {
+  return { name: S.profile?.name||"Instructor", id: "main" };
+}
+
+// ============================================================
 // SETTINGS
 // ============================================================
 function renderSettings(){
   const p=S.profile||{}; const u=S.user||{};
+  // ACD data
+  const acdList = S.acdInstructors||[];
+  const acdLink = S.acdLink;
+  const acdLog = (S.acdLog||[]);
+  const baseUrl = window.location.href.split('?')[0].split('#')[0];
+  const acdLinkUrl = acdLink?.token ? baseUrl+"?acd="+acdLink.token : "";
+  const acdSection = `
+<div class="card mb16">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
+    <h3>👥 ACD Instructor Accounts</h3>
+    ${acdList.length<3?'<button class="btn btn-primary btn-sm" data-action="acd-add">+ Add ACD</button>':''}
+  </div>
+  <div class="card-body" style="padding:0">
+    ${acdList.length===0?'<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">No ACD instructors added yet. Add up to 3.</div>':""}
+    ${acdList.map((acd,idx)=>{
+      const bnames=acd.batchIds?.map(bid=>{const b=S.batches.find(x=>x.id===bid);return b?b.name:"?"}).join(", ")||"None";
+      return '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">'
+        +'<div style="flex:1"><div class="fw500">'+acd.name+'</div>'
+        +'<div style="font-size:11px;color:var(--text3);margin-top:2px">'
+        +(acd.active?'<span style="color:var(--success)">● Active</span>':'<span style="color:var(--danger)">● Inactive</span>')
+        +' · Batches: '+bnames+'</div></div>'
+        +'<button class="btn btn-secondary btn-sm" data-action="acd-edit" data-idx="'+idx+'">Edit</button>'
+        +'<button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border-color:#fca5a5" data-action="acd-delete" data-idx="'+idx+'">✕</button>'
+        +'</div>';
+    }).join("")}
+  </div>
+</div>
+<div class="card mb16">
+  <div class="card-header"><h3>🔗 ACD Attendance Link</h3></div>
+  <div class="card-body">
+    <p class="text-sm text-secondary mb12">Share this link with ACD instructors. They select their name, enter PIN, and mark today's attendance for their assigned batches only.</p>
+    ${acdLinkUrl?
+      '<div class="form-group"><label class="form-label">Active Link</label><div class="flex" style="gap:6px">'
+      +'<input value="'+acdLinkUrl+'" readonly style="font-size:11px;background:var(--surface2)"/>'
+      +'<button class="btn btn-secondary btn-sm" style="flex-shrink:0" onclick="navigator.clipboard?.writeText(''+acdLinkUrl+'').then(()=>toast('Link copied!'))">Copy</button>'
+      +'</div></div>'
+      +'<div class="flex" style="gap:8px;margin-top:10px">'
+      +'<button class="btn btn-primary btn-sm" data-action="acd-share" data-url="'+acdLinkUrl+'">📤 Share</button>'
+      +'<button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border-color:#fca5a5" data-action="acd-revoke">Revoke</button>'
+      +'<button class="btn btn-secondary btn-sm" data-action="acd-generate">↻ New Link</button>'
+      +'</div>'
+      :'<button class="btn btn-primary" data-action="acd-generate">Generate ACD Link</button>'
+    }
+    <div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:var(--radius);padding:8px 10px;font-size:11px;color:var(--warn);margin-top:12px">
+      ⚠️ Generating a new link expires the old one.
+    </div>
+  </div>
+</div>
+${acdLog.length>0?
+  '<div class="card mb16"><div class="card-header" style="display:flex;justify-content:space-between;align-items:center">'
+  +'<h3>📋 ACD Activity Log</h3>'
+  +'<button class="btn btn-secondary btn-sm" data-action="acd-clear-log">Clear</button></div>'
+  +'<div class="card-body" style="padding:0">'
+  +acdLog.slice(0,20).map(e=>{
+    const t=e.at?new Date(e.at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}):"";
+    return '<div style="padding:10px 16px;border-bottom:1px solid var(--border);font-size:12px">'
+      +'<span class="fw500">'+e.name+'</span> marked <strong>'+e.count+'</strong> students'
+      +' in <strong>'+e.batchName+'</strong>'
+      +' <span style="color:var(--text3)"> — '+t+'</span></div>';
+  }).join("")
+  +'</div></div>'
+  :""
+}`;
+
   const posLabel=POSITIONS.find(x=>x.val===p.position)?.label||p.position||"";
-  return`
+  return acdSection+`
 <div class="card mb16">
   <div class="card-header"><h3>Profile</h3></div>
   <div class="card-body">
@@ -2024,6 +2476,47 @@ function parentLinkModal() {
 <div class="modal-footer">
   <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
   <button class="btn btn-primary" data-action="confirm-parent-link">Generate Link</button>
+</div>`);
+}
+
+function acdInstructorModal(idx) {
+  const acd = idx>=0 ? S.acdInstructors[idx] : null;
+  const batchOpts = S.batches.map(b=>`
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0">
+      <input type="checkbox" class="acd-batch-cb" value="${b.id}" style="width:auto"
+        ${acd?.batchIds?.includes(b.id)?"checked":""}/>
+      <span>${b.name} (${b.trade})</span>
+    </label>`).join("");
+  showModal(`
+<div class="modal-header">
+  <h3>${idx>=0?"Edit":"Add"} ACD Instructor</h3>
+  <button class="btn-icon" onclick="closeModal()">✕</button>
+</div>
+<div class="modal-body">
+  <div class="form-group">
+    <label class="form-label">Name</label>
+    <input id="acd-name" value="${acd?.name||""}" placeholder="e.g. SUMA K"/>
+  </div>
+  <div class="form-group">
+    <label class="form-label">${idx>=0?"New PIN (leave blank to keep current)":"PIN (4 digits)"}</label>
+    <input id="acd-pin" type="password" maxlength="4" inputmode="numeric" placeholder="4-digit PIN"/>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Allowed Batches</label>
+    <div style="border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;max-height:160px;overflow-y:auto">
+      ${batchOpts||'<p class="text-sm text-muted">No batches found. Add batches first.</p>'}
+    </div>
+  </div>
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="acd-active" style="width:auto" ${!acd||acd.active?"checked":""}/>
+      <span>Active (can mark attendance)</span>
+    </label>
+  </div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+  <button class="btn btn-primary" data-action="acd-save" data-idx="${idx}">Save</button>
 </div>`);
 }
 
@@ -2913,6 +3406,89 @@ async function handleClick(e){
     saveSFEntry(dk,sid,numVal).catch(e=>toast("Save error: "+e.message,"error"));
     return;
   }
+  // ── ACD actions ──
+  if(a==="acd-add"){
+    acdInstructorModal(-1);
+    return;
+  }
+  if(a==="acd-edit"){
+    acdInstructorModal(parseInt(btn.dataset.idx));
+    return;
+  }
+  if(a==="acd-delete"){
+    const idx=parseInt(btn.dataset.idx);
+    const acd=S.acdInstructors[idx];
+    if(!acd)return;
+    if(!confirm("Remove ACD instructor "+acd.name+"?"))return;
+    S.acdInstructors.splice(idx,1);
+    setLoading(true);
+    try{ await saveAcdInstructors(); refreshPage(); toast("ACD instructor removed"); }
+    catch(e){ toast(e.message,"error"); }
+    finally{ setLoading(false); }
+    return;
+  }
+  if(a==="acd-save"){
+    const idx=parseInt(btn.dataset.idx);
+    const name=(document.getElementById("acd-name")?.value||"").trim().toUpperCase();
+    const pin=document.getElementById("acd-pin")?.value||"";
+    const active=document.getElementById("acd-active")?.checked!==false;
+    if(!name){toast("Name required","error");return;}
+    const batchIds=[...document.querySelectorAll(".acd-batch-cb:checked")].map(cb=>cb.value);
+    setLoading(true);
+    try{
+      let pinHash;
+      if(pin){
+        if(pin.length!==4||!/^\d{4}$/.test(pin)){toast("PIN must be 4 digits","error");setLoading(false);return;}
+        pinHash=await hashPin(pin);
+      } else if(idx>=0){
+        pinHash=S.acdInstructors[idx].pinHash;
+      } else {
+        toast("PIN required for new ACD instructor","error");setLoading(false);return;
+      }
+      const record={id:idx>=0?S.acdInstructors[idx].id:uid(),name,pinHash,batchIds,active};
+      if(idx>=0) S.acdInstructors[idx]=record;
+      else S.acdInstructors.push(record);
+      await saveAcdInstructors();
+      closeModal(); refreshPage(); toast("ACD instructor saved");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+  if(a==="acd-generate"){
+    setLoading(true);
+    try{
+      const token=await generateAcdLink();
+      refreshPage();
+      toast("ACD link generated");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
+  if(a==="acd-revoke"){
+    if(!confirm("Revoke ACD link? ACD instructors will not be able to mark attendance until a new link is generated."))return;
+    setLoading(true);
+    try{ await revokeAcdLink(); refreshPage(); toast("ACD link revoked"); }
+    catch(e){ toast(e.message,"error"); }
+    finally{ setLoading(false); }
+    return;
+  }
+  if(a==="acd-share"){
+    const url=btn.dataset.url;
+    if(navigator.share) navigator.share({title:"ACD Attendance Link",url}).catch(()=>{});
+    else navigator.clipboard?.writeText(url).then(()=>toast("Link copied!"));
+    return;
+  }
+  if(a==="acd-clear-log"){
+    if(!confirm("Clear all ACD activity log?"))return;
+    setLoading(true);
+    try{
+      await setDoc(acdLogRef(),{entries:[]});
+      S.acdLog=[];
+      refreshPage();toast("Log cleared");
+    }catch(e){toast(e.message,"error");}
+    finally{setLoading(false);}
+    return;
+  }
   if(a==="generate-parent-link"){
     parentLinkModal();
     return;
@@ -2969,7 +3545,12 @@ async function handleClick(e){
     if(!S.attendance[dk])S.attendance[dk]={};
     S.attendance[dk][sid]={fn:val,an:val};
     closeModal();refreshPage();
-    saveAttendanceFS(dk,sid,val,val).then(()=>refreshParentLinkData()).catch(()=>{});
+    const lbl2=currentUserLabel();
+    const cur2=(S.attendance[dk]||{})[sid]||{};
+    const upd2=buildAttRecord(val,val,lbl2.name,lbl2.id,cur2);
+    if(!S.attendance[dk])S.attendance[dk]={};
+    S.attendance[dk][sid]=upd2;
+    saveAttendanceFS(dk,sid,val,val,upd2).then(()=>refreshParentLinkData()).catch(()=>{});
     return;
   }
   if(a==="mark-all-present"||a==="mark-all-absent"||a==="mark-all-permission"){
@@ -2981,7 +3562,16 @@ async function handleClick(e){
     if(!S.attendance[dk])S.attendance[dk]={};
     students.forEach(s=>S.attendance[dk][s.id]={fn:v,an:v});
     refreshPage();
-    markAllFS(dk,students.map(s=>s.id),v,v).then(()=>refreshParentLinkData()).catch(()=>{});
+    const lbl3=currentUserLabel();
+    const now3=Date.now();
+    students.forEach(s=>{
+      const cur3=(S.attendance[dk]||{})[s.id]||{};
+      const upd3=buildAttRecord(v,v,lbl3.name,lbl3.id,cur3);
+      if(!S.attendance[dk])S.attendance[dk]={};
+      S.attendance[dk][s.id]=upd3;
+    });
+    refreshPage();
+    markAllFS(dk,students.map(s=>s.id),v,v,lbl3).then(()=>refreshParentLinkData()).catch(()=>{});
     return;
   }
 
