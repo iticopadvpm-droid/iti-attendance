@@ -1692,7 +1692,10 @@ function renderAttendance(){
     <span class="att-mobile-expand" id="exp-arrow-${s.id}">▾</span>
   </div>
   <div style="padding:8px 12px 10px;background:var(--surface);border-top:1px solid var(--border)">
-    <div class="att-quick-btns">${quickBtns}</div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <div class="att-quick-btns" style="flex:1">${quickBtns}</div>
+      ${(fn||an)?`<button data-action="unmark-student" data-sid="${s.id}" data-dk="${dk}" style="padding:4px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;color:#94a3b8;font-size:11px;cursor:pointer;white-space:nowrap">&#10005; Clear</button>`:""}
+    </div>
   </div>
   <div class="att-expand-body" id="exp-body-${s.id}">
     <div class="att-sess-row">
@@ -1702,6 +1705,9 @@ function renderAttendance(){
     <div class="att-sess-row">
       <span class="att-sess-lbl">AN</span>
       <div class="att-quick-btns">${anBtns}</div>
+    </div>
+    <div style="padding-top:6px;text-align:right">
+      ${(fn||an)?`<button data-action="unmark-student" data-sid="${s.id}" data-dk="${dk}" style="padding:3px 10px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;color:#94a3b8;font-size:11px;cursor:pointer">&#10005; Clear FN &amp; AN</button>`:""}
     </div>
   </div>
 </div>`;
@@ -1728,6 +1734,7 @@ function renderAttendance(){
       <button class="btn btn-sm" style="background:#f3e8ff;border:1px solid #c4b5fd;color:#7c3aed" data-action="mark-all-permission">All Permission</button>
         <button class="btn btn-sm" style="background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1" data-action="share-attendance">📤 Share</button>
         <button class="btn btn-sm" style="background:#fef9c3;border:1px solid #fde047;color:#854d0e" data-action="generate-parent-link">🔗 Parent Link</button>
+      <button class="btn btn-sm" style="background:#f1f5f9;border:1px solid #cbd5e1;color:#64748b" data-action="unmark-all-students">&#10005; Clear All</button>
     </div>
   </div>
 </div>
@@ -3643,6 +3650,51 @@ async function handleClick(e){
     return;
   }
   if(a==="mark-both"){bothModal(btn.dataset.sid,btn.dataset.dk,btn.dataset.fn,btn.dataset.an);return;}
+  if(a==="unmark-student"){
+    const{sid,dk}=btn.dataset;
+    if(S.attendance[dk]&&S.attendance[dk][sid]){
+      delete S.attendance[dk][sid];
+      refreshPage();
+      setSyncStatus("syncing");
+      (async()=>{
+        try{
+          const r=attRef(dk);const snap=await getDoc(r);
+          if(snap.exists()){
+            const data=snap.data();
+            delete data[sid];
+            data._updated=Date.now();
+            await setDoc(r,data);
+          }
+          setSyncStatus("ok");toast("Attendance cleared");
+        }catch(e){setSyncStatus("error");toast(e.message,"error");}
+      })();
+    }
+    return;
+  }
+  if(a==="unmark-all-students"){
+    const{batchId,year,month,day}=S.attState;
+    const d2=Math.min(day,daysInMonth(year,month));
+    const dk2=`${year}-${pad(month+1)}-${pad(d2)}`;
+    if(!confirm("Clear ALL attendance for this date?"))return;
+    const stus=S.students.filter(s=>s.batchId===batchId);
+    stus.forEach(s=>{if(S.attendance[dk2])delete S.attendance[dk2][s.id];});
+    refreshPage();
+    setSyncStatus("syncing");
+    (async()=>{
+      try{
+        const r=attRef(dk2);const snap=await getDoc(r);
+        if(snap.exists()){
+          const stuIds=new Set(stus.map(s=>s.id));
+          const data=snap.data();const clean={};
+          Object.entries(data).forEach(([k,v])=>{if(!stuIds.has(k))clean[k]=v;});
+          clean._updated=Date.now();
+          await setDoc(r,clean);
+        }
+        setSyncStatus("ok");toast("All attendance cleared for "+dk2);
+      }catch(e){setSyncStatus("error");toast(e.message,"error");}
+    })();
+    return;
+  }
   if(a==="mark-both-val"){
     const{sid,dk,val}=btn.dataset;
     if(!S.attendance[dk])S.attendance[dk]={};
