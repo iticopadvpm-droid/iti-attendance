@@ -2326,7 +2326,7 @@ function renderSettings(){
 <div class="card mb16">
   <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
     <h3>👥 ACD Instructor Accounts</h3>
-    ${acdList.length<3?'<button class="btn btn-primary btn-sm" data-action="acd-add">+ Add ACD</button>':''}
+    ${acdList.length<200?'<button class="btn btn-primary btn-sm" data-action="acd-add">+ Add ACD</button>':''}
   </div>
   <div class="card-body" style="padding:0">
     ${acdList.length===0?'<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">No ACD instructors added yet. Add up to 3.</div>':""}
