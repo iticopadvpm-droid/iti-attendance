@@ -317,7 +317,8 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-         sendPasswordResetEmail, signOut, onAuthStateChanged }
+         sendPasswordResetEmail, signOut, onAuthStateChanged,
+         EmailAuthProvider, reauthenticateWithCredential, updatePassword }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
          collection, getDocs, writeBatch, query, where,
@@ -2406,9 +2407,22 @@ ${acdLog.length>0?
     <button class="btn btn-primary btn-sm mt12" data-action="change-pin">Update PIN</button>
   </div>
 </div>
+<div class="card mb16">
+  <div class="card-header"><h3>&#128274; Change Password</h3></div>
+  <div class="card-body">
+    <p class="text-sm text-secondary mb12">You will need to sign in again after changing your password.</p>
+    <div class="grid2" style="gap:8px;max-width:400px">
+      <div><label class="form-label">Current Password</label><input type="password" id="cur-pw" placeholder="Current password"/></div>
+      <div style="grid-column:1/-1"><label class="form-label">New Password</label><input type="password" id="new-pw" placeholder="New password (min 6 chars)"/></div>
+      <div style="grid-column:1/-1"><label class="form-label">Confirm New Password</label><input type="password" id="new-pw2" placeholder="Repeat new password"/></div>
+    </div>
+    <button class="btn btn-primary btn-sm mt12" data-action="change-password">Update Password</button>
+  </div>
+</div>
 <div class="card">
   <div class="card-header"><h3>Account</h3></div>
   <div class="card-body">
+    <p style="font-size:13px;color:var(--text3);margin-bottom:10px">Signed in as <strong>${u.email||""}</strong></p>
     <button class="btn btn-secondary" id="btn-signout">Sign out</button>
   </div>
 </div>`;
@@ -3897,6 +3911,7 @@ ${includeSF?'<span class="badge badge-accent" style="margin-left:8px;font-size:1
     return;
   }
 
+  if(a==="change-password"){await doChangePassword();return;}
   if(a==="change-pin"){
     const np=document.getElementById("new-pin")?.value.trim();
     const np2=document.getElementById("new-pin2")?.value.trim();
@@ -4153,6 +4168,32 @@ window.doImport=async function doImport(){
   }catch(e){
     console.error("Import error:",e);
     toast(e.message,"error");
+  }finally{
+    setLoading(false);
+  }
+}
+
+async function doChangePassword(){
+  const curPw = document.getElementById("cur-pw")?.value;
+  const newPw = document.getElementById("new-pw")?.value;
+  const newPw2= document.getElementById("new-pw2")?.value;
+  if(!curPw){toast("Enter your current password","error");return;}
+  if(!newPw||newPw.length<6){toast("New password must be at least 6 characters","error");return;}
+  if(newPw!==newPw2){toast("New passwords do not match","error");return;}
+  setLoading(true,"Updating password...");
+  try{
+    // Re-authenticate first
+    const credential=EmailAuthProvider.credential(S.user.email, curPw);
+    await reauthenticateWithCredential(S.user, credential);
+    // Update password
+    await updatePassword(S.user, newPw);
+    toast("Password updated successfully. Please sign in again.");
+    setTimeout(()=>signOut(auth),2000);
+  }catch(e){
+    if(e.code==="auth/wrong-password"||e.code==="auth/invalid-credential")
+      toast("Current password is incorrect","error");
+    else
+      toast(e.message,"error");
   }finally{
     setLoading(false);
   }
