@@ -4072,33 +4072,34 @@ function renderImportPreview(rows){
   if(impBtn){impBtn.disabled=false;impBtn.style.opacity="1";}
 }
 
-async function doImport(){
+window.doImport=async function doImport(){
   const rows=window._importRows;
   if(!rows?.length){toast("No data to import","error");return;}
   const defBatchId=document.getElementById("imp-batch")?.value||"";
 
-  // Skip duplicates
+  // Skip duplicates by adm number
   const toImport=rows.filter(r=>!S.students.some(s=>s.adm&&s.adm===r.adm));
   if(!toImport.length){toast("All rows are duplicates — nothing to import","error");return;}
 
   setLoading(true,`Importing ${toImport.length} students...`);
   try{
-    const batch=writeBatch(db);
+    const wbatch=writeBatch(db);
     const newStus=[];
     toImport.forEach(r=>{
       const id=uid();
       const batchId=r.batchId||defBatchId;
-      const obj={id,name:r.name,adm:r.adm,batchId,parentPhone:r.parentPhone};
-      batch.set(stuRef(id),obj);
+      const obj={id,name:r.name,adm:r.adm,batchId,parentPhone:r.parentPhone||""};
+      wbatch.set(studentRef(id),obj);
       newStus.push(obj);
     });
-    await batch.commit();
+    await wbatch.commit();
     S.students.push(...newStus);
     S.students.sort((a,b)=>a.name.localeCompare(b.name));
     closeModal();
     refreshPage();
-    toast(`&#9989; ${toImport.length} students imported successfully`);
+    toast(`${toImport.length} students imported successfully`);
   }catch(e){
+    console.error("Import error:",e);
     toast(e.message,"error");
   }finally{
     setLoading(false);
