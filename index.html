@@ -1685,7 +1685,7 @@ function renderAttendance(){
   <div class="att-mobile-header" data-action="toggle-expand" data-sid="${s.id}">
     <span class="att-mobile-sl">${idx+1}</span>
     <div style="flex:1;min-width:0">
-      <span class="att-mobile-name">${s.name}</span>
+      <span class="att-mobile-name">${s.name}</span> <span style="font-size:11px;color:#9ca3af;font-weight:400">${s.adm||""}</span>
       ${byLine}
     </div>
     <span class="att-mobile-status">${chip}</span>
@@ -1987,7 +1987,7 @@ function renderShopfloor() {
     return `<div class="att-mobile-card">
   <div class="att-mobile-header" style="cursor:default">
     <span class="att-mobile-sl">${idx+1}</span>
-    <span class="att-mobile-name">${s.name}</span>
+    <span class="att-mobile-name">${s.name}</span> <span style="font-size:11px;color:#9ca3af;font-weight:400">${s.adm||""}</span>
     <span class="att-mobile-status">${sfChip}</span>
   </div>
   <div style="padding:8px 12px 10px;background:var(--surface);border-top:1px solid var(--border)">
