@@ -1623,7 +1623,11 @@ function renderStudents(){
   return`
 <div class="flex flex-between mb16">
   <select style="width:220px" id="batch-filter"><option value="all">All batches</option>${bOpts}</select>
-  <button class="btn btn-primary" data-action="add-student">+ Add student</button>
+  <div class="flex gap8">
+    <button class="btn btn-secondary" data-action="dl-template" title="Download Excel template">&#11015; Template</button>
+    <button class="btn btn-secondary" data-action="bulk-import" title="Import from Excel/CSV">&#128230; Import Excel</button>
+    <button class="btn btn-primary" data-action="add-student">+ Add Student</button>
+  </div>
 </div>
 <div class="card p0"><table>
   <thead><tr><th>Adm No</th><th>Name</th><th>Batch</th><th>Actions</th></tr></thead>
@@ -3431,6 +3435,8 @@ async function handleClick(e){
   }
 
   // Student CRUD
+  if(a==="dl-template")  {downloadTemplate();return;}
+  if(a==="bulk-import")  {showImportModal();return;}
   if(a==="add-student")  {studentModal("");return;}
   if(a==="edit-student") {studentModal(btn.dataset.id);return;}
   if(a==="save-student") {
@@ -3873,6 +3879,231 @@ document.addEventListener("click", e => {
     ov.classList.remove("show");
   }
 });
+
+// ============================================================
+// BULK IMPORT — Download Template + Excel/CSV Import
+// ============================================================
+function downloadTemplate(){
+  // Build CSV with headers + batch names as guide
+  const batchList = S.batches.map(b=>b.name).join(" / ");
+  const headers = ["Adm No","Name","Batch Name","Parent Phone"];
+  const guide   = ["2025001","STUDENT NAME (CAPS)","Batch name exactly as in app ("+batchList+")","9847000000"];
+  const sample1 = ["2025002","ARUN KUMAR K","","9847111111"];
+  const sample2 = ["2025003","BIJU M","","9847222222"];
+
+  const rows = [headers, guide, sample1, sample2];
+  const csv  = rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\r\n");
+  const blob = new Blob([csv], {type:"text/csv"});
+  const a    = document.createElement("a");
+  a.href     = URL.createObjectURL(blob);
+  a.download = "student_import_template.csv";
+  a.click();
+  toast("Template downloaded");
+}
+
+function showImportModal(){
+  if(!S.batches.length){toast("Add at least one batch first","error");return;}
+  const bOpts = S.batches.map(b=>`<option value="${b.id}">${b.name}</option>`).join("");
+  showModal(`
+<div class="modal-header">
+  <h3>&#128230; Import Students from Excel / CSV</h3>
+  <button class="btn-icon" onclick="closeModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px 14px;margin-bottom:16px;font-size:13px">
+    <strong>Instructions:</strong><br>
+    1. Download the template using <strong>&#11015; Template</strong> button<br>
+    2. Fill student data in Excel — one student per row<br>
+    3. Save as <strong>CSV</strong> or keep as <strong>.xlsx</strong> and upload here<br>
+    4. Review the preview, then click <strong>Import</strong>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Default Batch (if batch column is empty)</label>
+    <select id="imp-batch">${bOpts}</select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Select File (.xlsx, .xls, .csv)</label>
+    <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" style="padding:6px;border:2px dashed #93c5fd;background:#eff6ff;border-radius:6px"/>
+  </div>
+  <div id="imp-preview"></div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+  <button class="btn btn-primary" id="imp-btn" onclick="doImport()" disabled style="opacity:.5">Import Students</button>
+</div>`);
+
+  document.getElementById("imp-file").addEventListener("change", async function(){
+    const file = this.files[0];
+    if(!file){return;}
+    const prev = document.getElementById("imp-preview");
+    prev.innerHTML = '<div style="text-align:center;padding:12px;color:var(--text3)">Reading file...</div>';
+    try{
+      const rows = await parseFile(file);
+      window._importRows = rows;
+      renderImportPreview(rows);
+    }catch(err){
+      prev.innerHTML = '<div style="color:var(--danger);padding:10px;font-size:13px">&#10060; Error: '+err.message+'</div>';
+    }
+  });
+}
+
+async function parseFile(file){
+  const name = file.name.toLowerCase();
+  if(name.endsWith(".csv")){
+    return parseCSV(await file.text());
+  } else {
+    // xlsx/xls — use SheetJS from CDN
+    return new Promise((resolve,reject)=>{
+      const script = document.getElementById("sheetjs-cdn");
+      function readFile(){
+        const reader = new FileReader();
+        reader.onload = e=>{
+          try{
+            const wb = XLSX.read(e.target.result,{type:"array"});
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const data = XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+            resolve(parseRows(data));
+          }catch(err){reject(err);}
+        };
+        reader.readAsArrayBuffer(file);
+      }
+      if(window.XLSX){readFile();}
+      else{
+        const s = document.createElement("script");
+        s.id = "sheetjs-cdn";
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        s.onload = readFile;
+        s.onerror = ()=>reject(new Error("Could not load Excel reader. Try saving as CSV."));
+        document.head.appendChild(s);
+      }
+    });
+  }
+}
+
+function parseCSV(text){
+  // Handle quoted CSV properly
+  const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").filter(l=>l.trim());
+  const rows  = lines.map(line=>{
+    const cols=[];let cur="",inQ=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(ch==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+      else if(ch===","&&!inQ){cols.push(cur.trim());cur="";}
+      else cur+=ch;
+    }
+    cols.push(cur.trim());
+    return cols;
+  });
+  return parseRows(rows);
+}
+
+function parseRows(rows){
+  if(!rows.length)throw new Error("File is empty");
+  // Detect header row
+  let dataStart=0;
+  const first=rows[0].map(v=>String(v).toLowerCase());
+  if(first.some(v=>v.includes("adm")||v.includes("name")||v.includes("batch"))){
+    dataStart=1; // skip header
+  }
+  const students=[];
+  for(let i=dataStart;i<rows.length;i++){
+    const row=rows[i];
+    const adm   = String(row[0]||"").trim();
+    const name  = String(row[1]||"").trim().toUpperCase();
+    const batch = String(row[2]||"").trim();
+    const phone = String(row[3]||"").trim();
+    if(!name||name==="STUDENT NAME (CAPS)")continue; // skip guide row
+    if(adm==="2025002"||adm==="2025003")continue;    // skip sample rows
+    students.push({adm,name,batchName:batch,parentPhone:phone,_row:i+1});
+  }
+  if(!students.length)throw new Error("No valid student rows found. Check your file format.");
+  return students;
+}
+
+function renderImportPreview(rows){
+  const prev=document.getElementById("imp-preview");
+  const impBtn=document.getElementById("imp-btn");
+
+  // Match batch names
+  const matched=rows.map(r=>{
+    const defBatch=document.getElementById("imp-batch")?.value||"";
+    const b=S.batches.find(b=>b.name.toLowerCase()===r.batchName.toLowerCase())||S.batches.find(b=>b.id===defBatch);
+    return{...r,batchId:b?.id||"",batchLabel:b?.name||"<span style='color:var(--danger)'>Not found</span>"};
+  });
+  window._importRows=matched;
+
+  const dup=matched.filter(r=>S.students.some(s=>s.adm&&s.adm===r.adm));
+  const noBatch=matched.filter(r=>!r.batchId);
+
+  const rows_html=matched.map((r,i)=>`
+    <tr style="${dup.find(d=>d.adm===r.adm)?"background:#fef2f2":""}">
+      <td style="padding:6px 8px;font-size:12px">${r._row}</td>
+      <td style="padding:6px 8px;font-size:12px">${r.adm||"&mdash;"}</td>
+      <td style="padding:6px 8px;font-size:12px;font-weight:600">${r.name}</td>
+      <td style="padding:6px 8px;font-size:12px">${r.batchLabel}</td>
+      <td style="padding:6px 8px;font-size:12px">${r.parentPhone||"&mdash;"}</td>
+      <td style="padding:6px 8px;font-size:12px">${dup.find(d=>d.adm===r.adm)?'<span style="color:var(--danger);font-size:11px">Dup Adm</span>':""}</td>
+    </tr>`).join("");
+
+  prev.innerHTML=`
+<div style="margin-top:14px">
+  <div style="display:flex;gap:12px;margin-bottom:10px;font-size:12px;flex-wrap:wrap">
+    <span style="color:var(--success)">&#9989; ${matched.length} students found</span>
+    ${dup.length?`<span style="color:var(--danger)">&#9888; ${dup.length} duplicate adm nos (will be skipped)</span>`:""}
+    ${noBatch.length?`<span style="color:var(--warn)">&#9888; ${noBatch.length} rows using default batch</span>`:""}
+  </div>
+  <div style="overflow-x:auto;max-height:280px;border:1px solid var(--border);border-radius:6px">
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead style="position:sticky;top:0;background:#f8fafc">
+      <tr>
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Row</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Adm No</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Batch</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Phone</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Note</th>
+      </tr>
+    </thead>
+    <tbody>${rows_html}</tbody>
+  </table>
+  </div>
+</div>`;
+
+  if(impBtn){impBtn.disabled=false;impBtn.style.opacity="1";}
+}
+
+async function doImport(){
+  const rows=window._importRows;
+  if(!rows?.length){toast("No data to import","error");return;}
+  const defBatchId=document.getElementById("imp-batch")?.value||"";
+
+  // Skip duplicates
+  const toImport=rows.filter(r=>!S.students.some(s=>s.adm&&s.adm===r.adm));
+  if(!toImport.length){toast("All rows are duplicates — nothing to import","error");return;}
+
+  setLoading(true,`Importing ${toImport.length} students...`);
+  try{
+    const batch=writeBatch(db);
+    const newStus=[];
+    toImport.forEach(r=>{
+      const id=uid();
+      const batchId=r.batchId||defBatchId;
+      const obj={id,name:r.name,adm:r.adm,batchId,parentPhone:r.parentPhone};
+      batch.set(stuRef(id),obj);
+      newStus.push(obj);
+    });
+    await batch.commit();
+    S.students.push(...newStus);
+    S.students.sort((a,b)=>a.name.localeCompare(b.name));
+    closeModal();
+    refreshPage();
+    toast(`&#9989; ${toImport.length} students imported successfully`);
+  }catch(e){
+    toast(e.message,"error");
+  }finally{
+    setLoading(false);
+  }
+}
 </script>
 </body>
 </html>
