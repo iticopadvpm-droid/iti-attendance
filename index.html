@@ -1117,10 +1117,10 @@ function renderParentView(data) {
 // ============================================================
 // Check if this is a parent/ACD view request first
 checkParentView().then(isParentView => {
-  if (isParentView) return;
+  if (isParentView) return true;  // pass true forward
   return checkAcdView();
-}).then(isAcdView => {
-  if (isAcdView) return;
+}).then(isSpecialView => {
+  if (isSpecialView) return;  // stop if parent OR acd view
 
   onAuthStateChanged(auth, async (user) => {
     if (user) {
