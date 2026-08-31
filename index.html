@@ -3525,6 +3525,7 @@ async function handleClick(e){
             data._updated=Date.now();
             await setDoc(r,data);
           }
+          await refreshParentLinkData();
           setSyncStatus("ok");toast("Attendance cleared");
         }catch(e){setSyncStatus("error");toast(e.message,"error");}
       })();
@@ -3550,6 +3551,7 @@ async function handleClick(e){
           clean._updated=Date.now();
           await setDoc(r,clean);
         }
+        await refreshParentLinkData();
         setSyncStatus("ok");toast("All attendance cleared for "+dk2);
       }catch(e){setSyncStatus("error");toast(e.message,"error");}
     })();
