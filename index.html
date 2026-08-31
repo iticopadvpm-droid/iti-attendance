@@ -3525,7 +3525,7 @@ async function handleClick(e){
             data._updated=Date.now();
             await setDoc(r,data);
           }
-          await refreshParentLinkData();
+          await refreshParentLinkData(dk);
           setSyncStatus("ok");toast("Attendance cleared");
         }catch(e){setSyncStatus("error");toast(e.message,"error");}
       })();
@@ -3551,7 +3551,7 @@ async function handleClick(e){
           clean._updated=Date.now();
           await setDoc(r,clean);
         }
-        await refreshParentLinkData();
+        await refreshParentLinkData(dk2);
         setSyncStatus("ok");toast("All attendance cleared for "+dk2);
       }catch(e){setSyncStatus("error");toast(e.message,"error");}
     })();
@@ -3567,7 +3567,7 @@ async function handleClick(e){
     const upd2=buildAttRecord(val,val,lbl2.name,lbl2.id,cur2);
     if(!S.attendance[dk])S.attendance[dk]={};
     S.attendance[dk][sid]=upd2;
-    saveAttendanceFS(dk,sid,val,val,upd2).then(()=>refreshParentLinkData()).catch(()=>{});
+    saveAttendanceFS(dk,sid,val,val,upd2).then(()=>refreshParentLinkData(dk)).catch(()=>{});
     return;
   }
   if(a==="mark-all-present"||a==="mark-all-absent"||a==="mark-all-permission"){
@@ -3588,7 +3588,7 @@ async function handleClick(e){
       S.attendance[dk][s.id]=upd3;
     });
     refreshPage();
-    markAllFS(dk,students.map(s=>s.id),v,v,lbl3).then(()=>refreshParentLinkData()).catch(()=>{});
+    markAllFS(dk,students.map(s=>s.id),v,v,lbl3).then(()=>refreshParentLinkData(dk)).catch(()=>{});
     return;
   }
 
@@ -3886,14 +3886,15 @@ async function pushParentLinkData(token, batchId, dk, inst, bname, mode) {
   });
 }
 
-async function refreshParentLinkData() {
-  // Called when instructor marks attendance - updates ALL batch links for today
+async function refreshParentLinkData(forceDk) {
+  // Called after any attendance change - pushes latest data to parent link
   try {
     const {batchId, year, month, day} = S.attState;
-    const dk = `${year}-${pad(month+1)}-${pad(Math.min(day, daysInMonth(year,month)))}`;
+    const dk = forceDk || `${year}-${pad(month+1)}-${pad(Math.min(day, daysInMonth(year,month)))}`;
     const snap = await getDoc(batchLinkRef(batchId));
     if(!snap.exists()||!snap.data().token) return;
     const pl = snap.data();
+    // Always push regardless of date - parent link shows whatever date instructor is viewing
     await pushParentLinkData(pl.token, batchId, dk, pl.inst, pl.bname, pl.mode);
   } catch(e) { /* silent */ }
 }
