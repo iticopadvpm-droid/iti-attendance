@@ -1735,6 +1735,7 @@ function renderAttendance(){
       <button class="btn btn-sm" style="background:#f3e8ff;border:1px solid #c4b5fd;color:#7c3aed" data-action="mark-all-permission">All Permission</button>
         <button class="btn btn-sm" style="background:#e0f2fe;border:1px solid #7dd3fc;color:#0369a1" data-action="share-attendance">📤 Share</button>
         <button class="btn btn-sm" style="background:#fef9c3;border:1px solid #fde047;color:#854d0e" data-action="generate-parent-link">🔗 Parent Link</button>
+        <button class="btn btn-sm" style="background:#f0fdf4;border:1px solid #86efac;color:#15803d" data-action="view-parent-link">&#128279; View Link</button>
       <button class="btn btn-sm" style="background:#f1f5f9;border:1px solid #cbd5e1;color:#64748b" data-action="unmark-all-students">&#10005; Clear All</button>
     </div>
   </div>
@@ -3613,6 +3614,10 @@ async function handleClick(e){
     finally{setLoading(false);}
     return;
   }
+  if(a==="view-parent-link"){
+    viewParentLink();
+    return;
+  }
   if(a==="generate-parent-link"){
     parentLinkModal();
     return;
@@ -4196,6 +4201,74 @@ async function doChangePassword(){
       toast(e.message,"error");
   }finally{
     setLoading(false);
+  }
+}
+
+async function viewParentLink(){
+  setLoading(true,"Loading link...");
+  try{
+    const snap=await getDoc(parentLinkRef());
+    setLoading(false);
+    if(!snap.exists()||!snap.data().token){
+      showModal(`
+<div class="modal-header">
+  <h3>&#128279; Parent Link</h3>
+  <button class="btn-icon" onclick="closeModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+  <div style="text-align:center;padding:20px;color:var(--text3)">
+    <div style="font-size:36px;margin-bottom:10px">&#128279;</div>
+    <p style="font-size:14px">No parent link generated yet.</p>
+    <p style="font-size:13px;color:var(--text3);margin-top:6px">Click <strong>&#128279; Parent Link</strong> button to generate one.</p>
+  </div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+  <button class="btn btn-primary" onclick="closeModal();parentLinkModal()">Generate Link</button>
+</div>`);
+      return;
+    }
+    const pl=snap.data();
+    const base=window.location.href.split("?")[0].split("#")[0];
+    const link=base+"?view="+pl.token;
+    const created=pl.created?new Date(pl.created).toLocaleString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"";
+    showModal(`
+<div class="modal-header">
+  <h3>&#128279; Existing Parent Link</h3>
+  <button class="btn-icon" onclick="closeModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+  <div style="background:var(--success-bg);border:1px solid var(--success-border);border-radius:var(--radius);padding:10px 12px;margin-bottom:14px;font-size:12px">
+    <div class="fw500 text-success">&#9989; Link is active</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:2px">
+      Batch: <strong>${pl.bname||"—"}</strong> &nbsp;·&nbsp;
+      Mode: <strong>${pl.mode==="absent"?"Absent only":"All students"}</strong>
+      ${created?'&nbsp;·&nbsp; Created: '+created:""}
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Share this link with parents</label>
+    <div class="flex" style="gap:6px">
+      <input id="view-link-input" value="${link}" readonly style="font-size:11px;background:var(--surface2)"/>
+      <button class="btn btn-secondary btn-sm" style="flex-shrink:0"
+        onclick="navigator.clipboard?.writeText(document.getElementById('view-link-input').value).then(()=>toast('Link copied!'))">
+        Copy
+      </button>
+    </div>
+  </div>
+  <div class="info-box info-box-amber" style="font-size:12px;margin-top:4px">
+    &#9888; Generating a new link will expire this one. Share this link, don't regenerate unless needed.
+  </div>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+  <button class="btn btn-primary" onclick="closeModal();if(navigator.share)navigator.share({title:'Attendance Link',url:'${link}'});else navigator.clipboard?.writeText('${link}').then(()=>toast('Copied!'))">
+    &#128228; Share
+  </button>
+</div>`);
+  }catch(e){
+    setLoading(false);
+    toast(e.message,"error");
   }
 }
 </script>
