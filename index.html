@@ -217,6 +217,23 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 .att-quick-btn.Pe{background:#f3e8ff;color:#7c3aed;border-color:#c4b5fd}
 .att-quick-btn.CL{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
 .att-quick-btn.ML{background:#fef3c7;color:#b45309;border-color:#fcd34d}
+/* Split button — top=FN, bottom=AN */
+.split-btn{position:relative;width:52px;height:44px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;overflow:hidden;display:inline-flex;flex-direction:column;font-size:11px;font-weight:700;flex-shrink:0}
+.split-btn .split-top,.split-btn .split-bot{flex:1;display:flex;align-items:center;justify-content:center;transition:background .1s}
+.split-btn .split-top{border-bottom:1px solid rgba(0,0,0,.08)}
+.split-btn .split-label{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-size:12px;font-weight:700;pointer-events:none;z-index:2;color:var(--text2)}
+.split-btn:active{transform:scale(.95)}
+/* Color maps for each status */
+.split-top.P{background:#dcfce7}.split-bot.P{background:#dcfce7}
+.split-top.A{background:#fee2e2}.split-bot.A{background:#fee2e2}
+.split-top.Pe{background:#f3e8ff}.split-bot.Pe{background:#f3e8ff}
+.split-top.CL{background:#dbeafe}.split-bot.CL{background:#dbeafe}
+.split-top.ML{background:#fef3c7}.split-bot.ML{background:#fef3c7}
+.split-top.none,.split-bot.none{background:var(--surface2)}
+/* Border colors when both same */
+.split-btn.all-P{border-color:#86efac}.split-btn.all-A{border-color:#fca5a5}
+.split-btn.all-Pe{border-color:#c4b5fd}.split-btn.all-CL{border-color:#93c5fd}
+.split-btn.all-ML{border-color:#fcd34d}
 .att-expand-body{padding:10px 12px;background:var(--surface2);border-top:1px solid var(--border);display:none}
 .att-expand-body.open{display:block}
 .att-sess-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
@@ -1676,9 +1693,20 @@ function renderAttendance(){
     else chip=`<span style="font-size:11px;color:var(--text3);font-style:italic">not marked</span>`;
 
     // Quick buttons (marks both FN+AN)
+    // Split buttons: top half = FN, bottom half = AN
     const quickBtns=SESS.map(v=>{
-      const active=fn===v&&an===v;
-      return`<button class="att-quick-btn ${active?v:""}" data-action="mark-both-val" data-sid="${s.id}" data-dk="${dk}" data-val="${v}">${v}</button>`;
+      const fnMatch=fn===v, anMatch=an===v;
+      const allMatch=fnMatch&&anMatch;
+      const borderCls=allMatch?`all-${v}`:"";
+      const topCls=fnMatch?v:"none";
+      const botCls=anMatch?v:"none";
+      // Color for label text
+      const labelColor={P:"#15803d",A:"#dc2626",Pe:"#7c3aed",CL:"#1d4ed8",ML:"#b45309"}[v]||"var(--text2)";
+      return`<div class="split-btn ${borderCls}" title="${v}: tap top for FN, bottom for AN">
+        <div class="split-top ${topCls}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="fn" data-val="${v}"></div>
+        <div class="split-label" style="color:${labelColor}">${v}</div>
+        <div class="split-bot ${botCls}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="an" data-val="${v}"></div>
+      </div>`;
     }).join("");
 
     // Expanded FN/AN buttons
