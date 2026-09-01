@@ -371,6 +371,7 @@ const TODAY = new Date();
 // ============================================================
 let S = {
   user: null,           // Firebase user
+  sortBy: localStorage.getItem('iti_sort')||'name',
   profile: null,        // { name, institute, pinHash }
   isUnlocked: false,
   batches: [],
@@ -486,7 +487,7 @@ async function deleteBatchFS(id) {
 async function loadStudents() {
   const snap = await getDocs(studentsRef());
   S.students = snap.docs.map(d=>({id:d.id,...d.data()}));
-  S.students.sort((a,b)=>a.name.localeCompare(b.name));
+  sortStudents();
 }
 
 async function saveStudentFS(student) {
@@ -2400,6 +2401,22 @@ ${acdLog.length>0?
   </div>
 </div>
 <div class="card mb16">
+  <div class="card-header"><h3>&#128260; Student Sort Order</h3></div>
+  <div class="card-body">
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:2px solid var(--border);border-radius:8px;${S.sortBy==='name'?'border-color:var(--primary);background:var(--primary-light)':''}">
+        <input type="radio" name="sort-by" value="name" ${S.sortBy==='name'?'checked':''} style="width:auto"/>
+        <div><div style="font-weight:600;font-size:13px">Sort by Name</div><div style="font-size:11px;color:var(--text3)">Alphabetical A→Z</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:2px solid var(--border);border-radius:8px;${S.sortBy==='adm'?'border-color:var(--primary);background:var(--primary-light)':''}">
+        <input type="radio" name="sort-by" value="adm" ${S.sortBy==='adm'?'checked':''} style="width:auto"/>
+        <div><div style="font-weight:600;font-size:13px">Sort by Admission No</div><div style="font-size:11px;color:var(--text3)">Numeric order</div></div>
+      </label>
+    </div>
+    <button class="btn btn-primary btn-sm mt12" data-action="save-sort">Apply Sort Order</button>
+  </div>
+</div>
+<div class="card mb16">
   <div class="card-header"><h3>Change PIN</h3></div>
   <div class="card-body">
     <div class="grid2" style="gap:8px;max-width:320px">
@@ -3317,7 +3334,7 @@ async function handleClick(e){
       await saveStudentFS(student);
       if(!editingId) S.students.push(student);
       else{const s=S.students.find(x=>x.id===editingId);if(s){s.adm=adm;s.name=nm;s.batchId=bid;}}
-      S.students.sort((a,b)=>a.name.localeCompare(b.name));
+      sortStudents();
       closeModal();refreshPage();toast("Student saved");
     }catch(e){toast(e.message,"error");}
     finally{setLoading(false);}
@@ -3757,6 +3774,15 @@ ${includeSF?'<span class="badge badge-accent" style="margin-left:8px;font-size:1
   }
 
   if(a==="change-password"){await doChangePassword();return;}
+  if(a==="save-sort"){
+    const val=document.querySelector("input[name='sort-by']:checked")?.value||"name";
+    S.sortBy=val;
+    localStorage.setItem('iti_sort',val);
+    sortStudents();
+    refreshPage();
+    toast("Sort order updated — "+( val==="name"?"A→Z by name":"by admission number"));
+    return;
+  }
   if(a==="change-pin"){
     const np=document.getElementById("new-pin")?.value.trim();
     const np2=document.getElementById("new-pin2")?.value.trim();
@@ -4175,7 +4201,7 @@ window.doImport=async function doImport(){
     });
     await wbatch.commit();
     S.students.push(...newStus);
-    S.students.sort((a,b)=>a.name.localeCompare(b.name));
+    sortStudents();
     closeModal();
     refreshPage();
     toast(`${toImport.length} students imported successfully`);
@@ -4213,6 +4239,16 @@ async function doChangePassword(){
   }
 }
 
+function sortStudents(){
+  if(S.sortBy==="adm"){
+    S.students.sort((a,b)=>{
+      const na=parseInt(a.adm)||99999, nb=parseInt(b.adm)||99999;
+      return na-nb||a.name.localeCompare(b.name);
+    });
+  } else {
+    sortStudents();
+  }
+}
 async function viewParentLink(){
   setLoading(true,"Loading links...");
   try{
