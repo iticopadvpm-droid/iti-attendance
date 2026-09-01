@@ -371,7 +371,7 @@ const TODAY = new Date();
 // ============================================================
 let S = {
   user: null,           // Firebase user
-  sortBy: localStorage.getItem('iti_sort')||'name',
+  sortBy: "name",
   profile: null,        // { name, institute, pinHash }
   isUnlocked: false,
   batches: [],
@@ -398,6 +398,8 @@ let lastHRData=null, lastHRMeta=null;
 // ============================================================
 // FIRESTORE HELPERS — data lives under /instructors/{uid}/...
 // ============================================================
+// Initialize sort preference from localStorage
+try{ S.sortBy = localStorage.getItem('iti_sort')||'name'; }catch(e){}
 const userPath = () => `instructors/${S.user.uid}`;
 const profileRef   = () => doc(db, userPath(), "_meta", "config", "profile");
 const batchesRef   = () => collection(db, userPath(), "batches");
