@@ -3898,15 +3898,27 @@ async function generateParentLink(mode) {
 async function pushParentLinkData(token, batchId, dk, inst, bname, mode) {
   const students = S.students.filter(s=>s.batchId===batchId);
   const isP = v => v==="P"||v==="Pe";
-  const dt = new Date(dk+'T00:00:00'); 
-  const dateObj = new Date(dk + 'T00:00:00'); // force local time to avoid UTC timezone shift
+  const dateObj = new Date(dk + 'T00:00:00');
   const dowFull = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dateObj.getDay()];
   const [y,m,d] = dk.split('-');
   const dateLabel = `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y} (${dowFull})`;
 
+  // Always read from Firestore directly to get fresh data (not stale S.attendance)
+  let attSnap = {};
+  try {
+    const snap = await getDoc(attRef(dk));
+    if(snap.exists()) attSnap = snap.data();
+    // Also update S.attendance cache
+    if(!S.attendance[dk]) S.attendance[dk] = {};
+    Object.assign(S.attendance[dk], attSnap);
+  } catch(e) {
+    // Fall back to in-memory if Firestore fails
+    attSnap = S.attendance[dk] || {};
+  }
+
   // Build student list
   const list = students.map(s => {
-    const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};
+    const r=attSnap[s.id]||{fn:"",an:""};
     const fp=isP(r.fn), ap=isP(r.an);
     let status, statusCode;
     if(r.fn==="CL"||r.an==="CL"){status="Casual Leave";statusCode="CL";}
