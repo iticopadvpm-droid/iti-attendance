@@ -3911,18 +3911,18 @@ async function pushParentLinkData(token, batchId, dk, inst, bname, mode) {
   const [y,m,d] = dk.split('-');
   const dateLabel = `${parseInt(d)} ${MONTHS[parseInt(m)-1]} ${y} (${dowFull})`;
 
-  // Always read from Firestore directly to get fresh data (not stale S.attendance)
-  let attSnap = {};
+  // Use S.attendance[dk] which is already updated in memory before this call
+  // Merge with Firestore to catch any marks from other sessions
+  let attSnap = Object.assign({}, S.attendance[dk] || {});
   try {
     const snap = await getDoc(attRef(dk));
-    if(snap.exists()) attSnap = snap.data();
-    // Also update S.attendance cache
-    if(!S.attendance[dk]) S.attendance[dk] = {};
-    Object.assign(S.attendance[dk], attSnap);
-  } catch(e) {
-    // Fall back to in-memory if Firestore fails
-    attSnap = S.attendance[dk] || {};
-  }
+    if(snap.exists()){
+      // Merge: in-memory wins (it has the latest mark just saved)
+      attSnap = Object.assign({}, snap.data(), S.attendance[dk] || {});
+    }
+    // Update cache
+    S.attendance[dk] = attSnap;
+  } catch(e) { /* use in-memory */ }
 
   // Build student list
   const list = students.map(s => {
