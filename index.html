@@ -3402,10 +3402,12 @@ async function handleClick(e){
     const cur=(S.attendance[dk]||{})[sid]||{fn:"",an:""};
     const fn=sess==="fn"?val:cur.fn;
     const an=sess==="an"?val:cur.an;
+    const lbl=currentUserLabel();
+    const upd=buildAttRecord(fn,an,lbl.name,lbl.id,cur);
     if(!S.attendance[dk])S.attendance[dk]={};
-    S.attendance[dk][sid]={fn,an};
+    S.attendance[dk][sid]=upd;
     refreshPage();
-    saveAttendanceFS(dk,sid,fn,an).catch(e=>toast("Save error: "+e.message,"error"));
+    saveAttendanceFS(dk,sid,fn,an,upd).then(()=>refreshParentLinkData(dk)).catch(e=>toast("Save error: "+e.message,"error"));
     return;
   }
   // Shopfloor marking
