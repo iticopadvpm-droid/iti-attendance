@@ -1091,21 +1091,27 @@ function renderParentView(data) {
 
   let listHTML = "";
   if (mode === "absent") {
-    const notPresent = list.filter(s=>s.statusCode!=="P");
-    if (notPresent.length === 0) {
+    // Only show actually absent/leave students — not unmarked
+    const notPresent = list.filter(s=>s.statusCode==="A"||s.statusCode==="CL"||s.statusCode==="ML"||s.statusCode==="PA"||s.statusCode==="AP");
+    const unmarked   = list.filter(s=>s.statusCode==="");
+    if (notPresent.length === 0 && unmarked.length === 0) {
       listHTML = '<div style="text-align:center;padding:20px;color:#16a34a;font-size:14px;font-weight:600">🎉 All students present today!</div>';
     } else {
-      listHTML = notPresent.map(s=>'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0"><span style="font-size:18px">' + (statusEmoji[s.statusCode]||"⬜") + '</span><div style="flex:1"><div style="font-weight:600;font-size:13px">' + s.name + '</div><div style="font-size:11px;color:#6b7280">Adm No: ' + s.adm + '</div></div><span style="font-size:11px;font-weight:600;color:' + (statusColor[s.statusCode]||"#999") + '">' + (statusLabel[s.statusCode]||"") + '</span></div>').join("");
+      // Show absent first, then unmarked
+      const showList = [...notPresent, ...unmarked.map(s=>({...s,statusCode:"",status:"Not yet marked"}))];
+      listHTML = showList.map(s=>'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f0f0"><span style="font-size:18px">' + (statusEmoji[s.statusCode]||"⬜") + '</span><div style="flex:1"><div style="font-weight:600;font-size:13px">' + s.name + '</div><div style="font-size:11px;color:#6b7280">Adm No: ' + s.adm + '</div></div><span style="font-size:11px;font-weight:600;color:' + (statusColor[s.statusCode]||"#999") + '">' + (statusLabel[s.statusCode]||"") + '</span></div>').join("");
     }
   } else {
     listHTML = list.map(s=>'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f0f0"><span style="font-size:16px">' + (statusEmoji[s.statusCode]||"⬜") + '</span><div style="flex:1"><div style="font-weight:500;font-size:13px">' + s.name + '</div><div style="font-size:11px;color:#6b7280">Adm: ' + s.adm + '</div></div><span style="font-size:11px;font-weight:600;color:' + (statusColor[s.statusCode]||"#999") + '">' + (statusLabel[s.statusCode]||"–") + '</span></div>').join("");
   }
 
+  const notMarkedCount = list.filter(s=>s.statusCode==="").length;
   const extraBadges = [
     stats.permission ? "🔵 Permission: " + stats.permission : "",
     stats.halfDay    ? "🕐 Half day: " + stats.halfDay : "",
     stats.cl         ? "🟡 CL: " + stats.cl : "",
-    stats.ml         ? "🟠 ML: " + stats.ml : ""
+    stats.ml         ? "🟠 ML: " + stats.ml : "",
+    notMarkedCount   ? "⬜ Not marked: " + notMarkedCount : ""
   ].filter(Boolean).map(t=>'<span style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:20px;padding:3px 10px;font-size:12px;color:#555">' + t + '</span>').join("");
 
   root.innerHTML =
