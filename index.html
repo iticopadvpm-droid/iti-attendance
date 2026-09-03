@@ -1069,14 +1069,63 @@ async function checkParentView() {
   try {
     const snap = await getDoc(pubLinkRef(token));
     if (!snap.exists() || !snap.data().active) { root.innerHTML = renderExpiredLink(); return true; }
-    renderParentView(snap.data());
-    setInterval(async () => {
+    const linkMeta = snap.data();
+
+    // Always load TODAY's attendance fresh from the instructor's Firestore
+    async function loadAndRender() {
       try {
-        const s2 = await getDoc(pubLinkRef(token));
-        if (s2.exists() && s2.data().active) renderParentView(s2.data());
-        else root.innerHTML = renderExpiredLink();
-      } catch(e) {}
-    }, 60000);
+        const today = new Date();
+        const dk = today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
+        const dowFull = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][today.getDay()];
+        const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+        const dateLabel = `${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()} (${dowFull})`;
+
+        // Read today's attendance from instructor's private collection
+        const attSnap = await getDoc(doc(db, "instructors", linkMeta.uid, "attendance", dk));
+        const attData = attSnap.exists() ? attSnap.data() : {};
+
+        // Read students from instructor's private collection
+        const studSnap = await getDocs(collection(db, "instructors", linkMeta.uid, "students"));
+        const allStudents = studSnap.docs.map(d=>({id:d.id,...d.data()}));
+        const students = allStudents.filter(s=>s.batchId===linkMeta.batchId);
+
+        // Build list
+        const isP = v=>v==="P"||v==="Pe";
+        const list = students.map(s=>{
+          const r = attData[s.id]||{fn:"",an:""};
+          const fn=r.fn||"", an=r.an||"";
+          let statusCode="";
+          if(fn&&an){ if(fn===an) statusCode=fn; else statusCode=isP(fn)&&!isP(an)?"AP":!isP(fn)&&isP(an)?"PA":"A"; }
+          return {name:s.name, adm:s.adm||s.admNo||"", statusCode};
+        });
+        const present = list.filter(s=>isP(s.statusCode)||(s.statusCode==="PA"||s.statusCode==="AP")?false:s.statusCode==="P").length;
+        const presentCount = list.filter(s=>s.statusCode==="P").length;
+        const absentCount  = list.filter(s=>["A","CL","ML","PA","AP"].includes(s.statusCode)).length;
+        const stats = {
+          present: presentCount,
+          absent:  absentCount,
+          total:   students.length,
+          permission: list.filter(s=>s.statusCode==="Pe").length,
+          halfDay:    list.filter(s=>s.statusCode==="PA"||s.statusCode==="AP").length,
+          cl: list.filter(s=>s.statusCode==="CL").length,
+          ml: list.filter(s=>s.statusCode==="ML").length
+        };
+        const viewData = {
+          inst: linkMeta.inst,
+          bname: linkMeta.bname,
+          mode: linkMeta.mode||"absent",
+          dateLabel, stats, list,
+          updatedAt: Date.now()
+        };
+        renderParentView(viewData);
+      } catch(e) {
+        // Fall back to stored data if fresh read fails
+        renderParentView(linkMeta);
+      }
+    }
+
+    await loadAndRender();
+    setInterval(loadAndRender, 60000);
   } catch(e) {
     root.innerHTML = '<div style=\"text-align:center;padding:60px;font-family:sans-serif\"><div style=\"font-size:36px\">⚠️</div><h2>Unable to load</h2><p style=\"color:#666\">' + e.message + '</p></div>';
   }
