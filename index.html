@@ -340,7 +340,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
          collection, getDocs, writeBatch, query, where,
-         enableIndexedDbPersistence }
+         onSnapshot, enableIndexedDbPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ============================================================
@@ -1125,7 +1125,12 @@ async function checkParentView() {
     }
 
     await loadAndRender();
-    setInterval(loadAndRender, 60000);
+
+    // Real-time listener on attendance doc — triggers instantly when instructor marks
+    const today = new Date();
+    const dk = today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
+    const attDocRef = doc(db, "instructors", linkMeta.uid, "attendance", dk);
+    onSnapshot(attDocRef, ()=>{ loadAndRender(); });
   } catch(e) {
     root.innerHTML = '<div style=\"text-align:center;padding:60px;font-family:sans-serif\"><div style=\"font-size:36px\">⚠️</div><h2>Unable to load</h2><p style=\"color:#666\">' + e.message + '</p></div>';
   }
@@ -1190,7 +1195,7 @@ function renderParentView(data) {
       '<div>' + listHTML + '</div>' +
     '</div>' +
     '<div style="text-align:center;padding:16px;font-size:11px;color:#9ca3af;border-top:1px solid #f0f0f0">' +
-      '<div>⟳ Auto-refreshes every 60 seconds</div>' +
+      '<div>⚡ Live — updates instantly when attendance changes</div>' +
       (updated ? '<div style="margin-top:4px">Last updated: ' + updated + '</div>' : '') +
       '<div style="margin-top:4px">ITI Attendance System</div>' +
     '</div>' +
