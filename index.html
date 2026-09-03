@@ -1512,7 +1512,10 @@ async function loadAll(){
   // Load this month's attendance
   await loadAttendanceMonth(S.attState.year, S.attState.month);
   // Set defaults
-  if(!S.attState.batchId&&S.batches.length) S.attState.batchId=S.batches[0].id;
+  if(!S.attState.batchId&&S.batches.length){
+    const saved=localStorage.getItem('iti_default_batch');
+    S.attState.batchId=(saved&&S.batches.find(b=>b.id===saved))?saved:S.batches[0].id;
+  }
   if(!S.monthRep.batchId&&S.batches.length) S.monthRep.batchId=S.batches[0].id;
   if(!S.hrState.batchId&&S.batches.length)  S.hrState.batchId=S.batches[0].id;
   const y=TODAY.getFullYear();
@@ -3312,7 +3315,7 @@ function bindPageEvents(){
 function handleChange(e){
   const t=e.target;
   if(t.id==="batch-filter"){S.studFilter=t.value;refreshPage();}
-  else if(t.id==="att-batch"){S.attState.batchId=t.value;loadAttPageData();}
+  else if(t.id==="att-batch"){S.attState.batchId=t.value;localStorage.setItem('iti_default_batch',t.value);loadAttPageData();}
   else if(t.id==="att-month"){S.attState.month=parseInt(t.value);loadAttPageData();}
   else if(t.id==="att-year"){S.attState.year=parseInt(t.value)||TODAY.getFullYear();loadAttPageData();}
   else if(t.id==="att-day"){S.attState.day=parseInt(t.value);refreshPage();}
@@ -3357,7 +3360,10 @@ async function loadAttPageData(){
   try{
     await Promise.all([loadStudents(), loadAttendanceMonth(S.attState.year,S.attState.month)]);
     await syncAcdMarks(); // pull ACD marks into real attendance
-    if(!S.attState.batchId&&S.batches.length) S.attState.batchId=S.batches[0].id;
+    if(!S.attState.batchId&&S.batches.length){
+      const saved=localStorage.getItem('iti_default_batch');
+      S.attState.batchId=(saved&&S.batches.find(b=>b.id===saved))?saved:S.batches[0].id;
+    }
     refreshPage();
   }catch(e){toast(e.message,"error");refreshPage();}
   finally{setLoading(false);}
