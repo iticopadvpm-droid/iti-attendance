@@ -1142,9 +1142,10 @@ async function checkParentView() {
     const today = new Date();
     const dk = today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
     const ownerUid = linkMeta.uid||linkMeta.ownerUid||"";
-    const attDocRef = ownerUid ? doc(db, "instructors", ownerUid, "attendance", dk) : null;
-    if(attDocRef) onSnapshot(attDocRef, ()=>{ loadAndRender(); });
-    onSnapshot(attDocRef, ()=>{ loadAndRender(); });
+    if(ownerUid){
+      const attDocRef = doc(db, "instructors", ownerUid, "attendance", dk);
+      onSnapshot(attDocRef, ()=>{ loadAndRender(); });
+    }
   } catch(e) {
     root.innerHTML = '<div style=\"text-align:center;padding:60px;font-family:sans-serif\"><div style=\"font-size:36px\">⚠️</div><h2>Unable to load</h2><p style=\"color:#666\">' + e.message + '</p></div>';
   }
