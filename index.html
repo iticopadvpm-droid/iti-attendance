@@ -885,12 +885,20 @@ async function renderAcdAttendance(acd, state) {
 
   try {
     const allowedBatchIds = acd.batchIds||[];
-    // Use pre-loaded snapshot from public acdlinks doc — no auth needed
-    const batches = (linkData.batches||[]).filter(b=>allowedBatchIds.includes(b.id));
-    const students = (linkData.students||[]).filter(s=>allowedBatchIds.includes(s.batchId));
+    const ownerUid = state.ownerUid;
+
+    // Read fresh students and batches directly from instructor's Firestore data
+    const [batchSnap, studSnap, marksSnap] = await Promise.all([
+      getDocs(collection(db, "instructors", ownerUid, "batches")),
+      getDocs(collection(db, "instructors", ownerUid, "students")),
+      getDoc(doc(db,"acdmarks",state.linkData.token+"_"+dk))
+    ]);
+    const allBatches = batchSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const allStudents = studSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const batches = allBatches.filter(b=>allowedBatchIds.includes(b.id));
+    const students = allStudents.filter(s=>allowedBatchIds.includes(s.batchId));
 
     // Load today's attendance marks from public acdmarks collection
-    const marksSnap = await getDoc(doc(db,"acdmarks",state.linkData.token+"_"+dk));
     const attData = marksSnap.exists() ? marksSnap.data() : {};
 
     state.batches = batches;
