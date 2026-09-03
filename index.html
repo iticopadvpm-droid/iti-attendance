@@ -1081,11 +1081,13 @@ async function checkParentView() {
         const dateLabel = `${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()} (${dowFull})`;
 
         // Read today's attendance from instructor's private collection
-        const attSnap = await getDoc(doc(db, "instructors", linkMeta.uid, "attendance", dk));
+        const ownerUid = linkMeta.uid||linkMeta.ownerUid||"";
+        if(!ownerUid) throw new Error("Link data missing instructor ID. Please ask instructor to regenerate the link.");
+        const attSnap = await getDoc(doc(db, "instructors", ownerUid, "attendance", dk));
         const attData = attSnap.exists() ? attSnap.data() : {};
 
         // Read students from instructor's private collection
-        const studSnap = await getDocs(collection(db, "instructors", linkMeta.uid, "students"));
+        const studSnap = await getDocs(collection(db, "instructors", ownerUid, "students"));
         const allStudents = studSnap.docs.map(d=>({id:d.id,...d.data()}));
         const students = allStudents.filter(s=>s.batchId===linkMeta.batchId);
 
@@ -1093,22 +1095,28 @@ async function checkParentView() {
         const isP = v=>v==="P"||v==="Pe";
         const list = students.map(s=>{
           const r = attData[s.id]||{fn:"",an:""};
-          const fn=r.fn||"", an=r.an||"";
+          const fn=String(r.fn||""), an=String(r.an||"");
           let statusCode="";
-          if(fn&&an){ if(fn===an) statusCode=fn; else statusCode=isP(fn)&&!isP(an)?"AP":!isP(fn)&&isP(an)?"PA":"A"; }
-          return {name:s.name, adm:s.adm||s.admNo||"", statusCode};
+          if(fn&&an){
+            if(fn===an) statusCode=fn;
+            else if(isP(fn)&&!isP(an)) statusCode="AP";
+            else if(!isP(fn)&&isP(an)) statusCode="PA";
+            else statusCode="A";
+          } else if(fn) statusCode=fn;
+          else if(an) statusCode=an;
+          return {name:String(s.name||""), adm:String(s.adm||s.admNo||""), statusCode:String(statusCode)};
         });
-        const present = list.filter(s=>isP(s.statusCode)||(s.statusCode==="PA"||s.statusCode==="AP")?false:s.statusCode==="P").length;
         const presentCount = list.filter(s=>s.statusCode==="P").length;
-        const absentCount  = list.filter(s=>["A","CL","ML","PA","AP"].includes(s.statusCode)).length;
+        const absentList   = ["A","CL","ML","PA","AP"];
+        const absentCount  = list.filter(s=>absentList.indexOf(s.statusCode)>-1).length;
         const stats = {
-          present: presentCount,
-          absent:  absentCount,
-          total:   students.length,
+          present:    presentCount,
+          absent:     absentCount,
+          total:      students.length,
           permission: list.filter(s=>s.statusCode==="Pe").length,
           halfDay:    list.filter(s=>s.statusCode==="PA"||s.statusCode==="AP").length,
-          cl: list.filter(s=>s.statusCode==="CL").length,
-          ml: list.filter(s=>s.statusCode==="ML").length
+          cl:         list.filter(s=>s.statusCode==="CL").length,
+          ml:         list.filter(s=>s.statusCode==="ML").length
         };
         const viewData = {
           inst: linkMeta.inst,
@@ -1119,8 +1127,12 @@ async function checkParentView() {
         };
         renderParentView(viewData);
       } catch(e) {
-        // Fall back to stored data if fresh read fails
-        renderParentView(linkMeta);
+        // If uid missing, show helpful message
+        if(!linkMeta.uid && !linkMeta.ownerUid){
+          root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f6f9;font-family:sans-serif"><div style="text-align:center;padding:40px;max-width:340px"><div style="font-size:48px;margin-bottom:16px">🔗</div><h2 style="font-size:18px;font-weight:700;margin-bottom:8px">Link needs refresh</h2><p style="color:#666;font-size:14px;line-height:1.6">Please ask your instructor to tap <strong>Parent Link</strong> in the attendance page once to reactivate this link.</p></div></div>';
+        } else {
+          renderParentView(linkMeta); // fall back to stored data
+        }
       }
     }
 
@@ -1129,7 +1141,9 @@ async function checkParentView() {
     // Real-time listener on attendance doc — triggers instantly when instructor marks
     const today = new Date();
     const dk = today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
-    const attDocRef = doc(db, "instructors", linkMeta.uid, "attendance", dk);
+    const ownerUid = linkMeta.uid||linkMeta.ownerUid||"";
+    const attDocRef = ownerUid ? doc(db, "instructors", ownerUid, "attendance", dk) : null;
+    if(attDocRef) onSnapshot(attDocRef, ()=>{ loadAndRender(); });
     onSnapshot(attDocRef, ()=>{ loadAndRender(); });
   } catch(e) {
     root.innerHTML = '<div style=\"text-align:center;padding:60px;font-family:sans-serif\"><div style=\"font-size:36px\">⚠️</div><h2>Unable to load</h2><p style=\"color:#666\">' + e.message + '</p></div>';
@@ -4019,7 +4033,7 @@ async function generateParentLink(mode) {
     // Save token + mode for this batch (permanent)
     await setDoc(batchLinkRef(batchId), {
       token, batchId, mode,
-      inst, bname,
+      inst, bname, uid: S.user.uid,
       instructorName: S.profile?.name||"",
       created: existingSnap.exists()?existingSnap.data().created:Date.now(),
       updated: Date.now()
@@ -4040,7 +4054,7 @@ async function generateParentLink(mode) {
   }
 }
 
-async function pushParentLinkData(token, batchId, dk, inst, bname, mode) {
+async function pushParentLinkData(token, batchId, dk, inst, bname, mode, uid) {
   const students = S.students.filter(s=>s.batchId===batchId);
   const isP = v => v==="P"||v==="Pe";
   const dateObj = new Date(dk + 'T00:00:00');
@@ -4090,7 +4104,8 @@ async function pushParentLinkData(token, batchId, dk, inst, bname, mode) {
   // Store in public parentlinks collection
   await setDoc(pubLinkRef(token), {
     token, inst, bname, dateLabel, dk,
-    mode, stats, list,
+    uid: S.user?.uid||"",
+    batchId, mode, stats, list,
     updatedAt: Date.now(),
     active: true
   });
