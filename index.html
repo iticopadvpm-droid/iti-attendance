@@ -396,7 +396,7 @@ let S = {
   students: [],
   attendance: {},       // { dateKey: { studentId: {fn,an} } }
   page: "dashboard",
-  attState: { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate() },
+  attState: { batchId:localStorage.getItem('iti_default_batch')||"" , year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate() },
   studFilter: "all",
   monthRep: { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth() },
   hrState: { batchId:"", h1s:"", h1e:"", h2s:"", h2e:"" },
@@ -1512,9 +1512,14 @@ async function loadAll(){
   // Load this month's attendance
   await loadAttendanceMonth(S.attState.year, S.attState.month);
   // Set defaults
+  // Validate saved batch still exists, else fall back to first
+  if(S.attState.batchId && !S.batches.find(b=>b.id===S.attState.batchId)){
+    S.attState.batchId="";
+  }
   if(!S.attState.batchId&&S.batches.length){
     const saved=localStorage.getItem('iti_default_batch');
     S.attState.batchId=(saved&&S.batches.find(b=>b.id===saved))?saved:S.batches[0].id;
+    localStorage.setItem('iti_default_batch',S.attState.batchId);
   }
   if(!S.monthRep.batchId&&S.batches.length) S.monthRep.batchId=S.batches[0].id;
   if(!S.hrState.batchId&&S.batches.length)  S.hrState.batchId=S.batches[0].id;
