@@ -398,8 +398,8 @@ let S = {
   page: "dashboard",
   attState: { batchId:localStorage.getItem('iti_default_batch')||"" , year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate() },
   studFilter: "all",
-  monthRep: { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth() },
-  hrState: { batchId:"", h1s:"", h1e:"", h2s:"", h2e:"" },
+  monthRep: { batchId:localStorage.getItem('iti_default_batch')||"", year:TODAY.getFullYear(), month:TODAY.getMonth() },
+  hrState: { batchId:localStorage.getItem('iti_default_batch')||"", h1s:"", h1e:"", h2s:"", h2e:"" },
   syncStatus: "ok",     // ok | syncing | error
   holidays: {},         // { "YYYY-MM-DD": { name: "Onam" } }
   shopfloor: {},        // { "YYYY-MM-DD": { studentId: 0.25|0.33|0.5|1.0 } }
@@ -649,7 +649,7 @@ async function deleteHoliday(dk) {
   } catch(e) { setSyncStatus("error"); throw e; }
 }
 
-let attBookState = { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth() };
+let attBookState = { batchId:localStorage.getItem('iti_default_batch')||"", year:TODAY.getFullYear(), month:TODAY.getMonth() };
 
 async function loadAttBookData() {
   setLoading(true, "Loading register...");
@@ -2061,7 +2061,7 @@ async function clearSFDay(dk, studentIds) {
   } catch(e) { setSyncStatus("error"); throw e; }
 }
 
-let sfState = { batchId:"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate() };
+let sfState = { batchId:localStorage.getItem('iti_default_batch')||"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate() };
 
 async function loadShopfloorData() {
   setLoading(true, "Loading shopfloor...");
@@ -3324,10 +3324,10 @@ function handleChange(e){
   else if(t.id==="att-month"){S.attState.month=parseInt(t.value);loadAttPageData();}
   else if(t.id==="att-year"){S.attState.year=parseInt(t.value)||TODAY.getFullYear();loadAttPageData();}
   else if(t.id==="att-day"){S.attState.day=parseInt(t.value);refreshPage();}
-  else if(t.id==="rep-batch"){S.monthRep.batchId=t.value;}
+  else if(t.id==="rep-batch"){S.monthRep.batchId=t.value;localStorage.setItem('iti_default_batch',t.value);}
   else if(t.id==="rep-month"){S.monthRep.month=parseInt(t.value);}
   else if(t.id==="rep-year"){S.monthRep.year=parseInt(t.value)||TODAY.getFullYear();}
-  else if(t.id==="hr-batch"){S.hrState.batchId=t.value;}
+  else if(t.id==="hr-batch"){S.hrState.batchId=t.value;localStorage.setItem('iti_default_batch',t.value);}
   else if(t.id==="hr-h1s"){S.hrState.h1s=t.value;}
   else if(t.id==="hr-h1e"){S.hrState.h1e=t.value;}
   else if(t.id==="hr-h2s"){S.hrState.h2s=t.value;}
@@ -3345,12 +3345,12 @@ function handleChange(e){
   else if(t.id==="hr-pd-date"){S.printDetails.printDate=t.checked;}
   else if(t.id==="hr-pd-sf"){S.printDetails.includeSF=t.checked;}
   // Shopfloor filters
-  else if(t.id==="sf-batch"){sfState.batchId=t.value;refreshPage();}
+  else if(t.id==="sf-batch"){sfState.batchId=t.value;localStorage.setItem('iti_default_batch',t.value);refreshPage();}
   else if(t.id==="sf-month"){sfState.month=parseInt(t.value);loadShopfloorData();}
   else if(t.id==="sf-year"){sfState.year=parseInt(t.value)||TODAY.getFullYear();loadShopfloorData();}
   else if(t.id==="sf-day"){sfState.day=parseInt(t.value);refreshPage();}
   // Attendance book filters
-  else if(t.id==="ab-batch"){attBookState.batchId=t.value;refreshPage();}
+  else if(t.id==="ab-batch"){attBookState.batchId=t.value;localStorage.setItem('iti_default_batch',t.value);refreshPage();}
   else if(t.id==="ab-month"){attBookState.month=parseInt(t.value);loadAttBookData();}
   else if(t.id==="ab-year"){attBookState.year=parseInt(t.value)||TODAY.getFullYear();loadAttBookData();}
   // Attendance book print details
