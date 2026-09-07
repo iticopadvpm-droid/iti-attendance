@@ -339,7 +339,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
          EmailAuthProvider, reauthenticateWithCredential, updatePassword }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc,
-         collection, getDocs, writeBatch, query, where,
+         collection, getDocs, writeBatch, query, where, documentId,
          onSnapshot, enableIndexedDbPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -541,11 +541,14 @@ async function deleteStudentFS(id) {
 async function loadAttendanceMonth(year, month) {
   const from = `${year}-${pad(month+1)}-01`;
   const to   = `${year}-${pad(month+1)}-${pad(daysInMonth(year,month))}`;
-  // Firestore doesn't support __name__ range queries — fetch all and filter client-side
-  const snap = await getDocs(attColRef());
-  snap.docs.forEach(d => {
-    if (d.id >= from && d.id <= to) S.attendance[d.id] = d.data();
+  // Clear only this month's data to avoid stale entries
+  Object.keys(S.attendance).forEach(dk => {
+    if(dk >= from && dk <= to) delete S.attendance[dk];
   });
+  // Use documentId range query — efficient, no full collection fetch
+  const q = query(attColRef(), where(documentId(), '>=', from), where(documentId(), '<=', to));
+  const snap = await getDocs(q);
+  snap.docs.forEach(d => { S.attendance[d.id] = d.data(); });
 }
 
 async function saveAttendanceFS(dk, sid, fn, an, meta) {
@@ -1081,7 +1084,7 @@ async function checkParentView() {
         const dateLabel = `${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()} (${dowFull})`;
 
         // Read today's attendance from instructor's private collection
-        const ownerUid = linkMeta.uid||linkMeta.ownerUid||"";
+        const ownerUid = linkMeta.uid||"";
         if(!ownerUid) throw new Error("Link data missing instructor ID. Please ask instructor to regenerate the link.");
         const attSnap = await getDoc(doc(db, "instructors", ownerUid, "attendance", dk));
         const attData = attSnap.exists() ? attSnap.data() : {};
@@ -1150,7 +1153,7 @@ async function checkParentView() {
     // Real-time listener on attendance doc — triggers instantly when instructor marks
     const today = new Date();
     const dk = today.getFullYear()+"-"+String(today.getMonth()+1).padStart(2,"0")+"-"+String(today.getDate()).padStart(2,"0");
-    const ownerUid = linkMeta.uid||linkMeta.ownerUid||"";
+    const ownerUid = linkMeta.uid||"";
     if(ownerUid){
       const attDocRef = doc(db, "instructors", ownerUid, "attendance", dk);
       onSnapshot(attDocRef, ()=>{ loadAndRender(); });
