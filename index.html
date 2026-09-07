@@ -1099,22 +1099,31 @@ async function checkParentView() {
           let statusCode="";
           if(fn&&an){
             if(fn===an) statusCode=fn;
-            else if(isP(fn)&&!isP(an)) statusCode="AP";
-            else if(!isP(fn)&&isP(an)) statusCode="PA";
+            // Both marked: one present, one absent → Half Day Absent
+            else if(isP(fn)&&an==="A") statusCode="HA";
+            else if(fn==="A"&&isP(an)) statusCode="HA";
+            else if(isP(fn)&&isP(an)) statusCode="P";
             else statusCode="A";
-          } else if(fn) statusCode=fn;
-          else if(an) statusCode=an;
+          } else if(fn&&!an){
+            // Only FN marked
+            statusCode=isP(fn)?"HP":fn; // present FN only→HP, absent FN only→A
+          } else if(!fn&&an){
+            // Only AN marked
+            statusCode=isP(an)?"HP":an; // present AN only→HP, absent AN only→A
+          }
           return {name:String(s.name||""), adm:String(s.adm||s.admNo||""), statusCode:String(statusCode)};
         });
-        const presentCount = list.filter(s=>s.statusCode==="P").length;
-        const absentList   = ["A","CL","ML","PA","AP"];
+        const presentCount = list.filter(s=>s.statusCode==="P"||s.statusCode==="HP").length;
+        const absentList   = ["A","CL","ML","HA"];
         const absentCount  = list.filter(s=>absentList.indexOf(s.statusCode)>-1).length;
         const stats = {
           present:    presentCount,
           absent:     absentCount,
           total:      students.length,
           permission: list.filter(s=>s.statusCode==="Pe").length,
-          halfDay:    list.filter(s=>s.statusCode==="PA"||s.statusCode==="AP").length,
+          halfDayPresent: list.filter(s=>s.statusCode==="HP").length,
+          halfDayAbsent:  list.filter(s=>s.statusCode==="HA").length,
+          halfDay:    list.filter(s=>s.statusCode==="HP"||s.statusCode==="HA").length,
           cl:         list.filter(s=>s.statusCode==="CL").length,
           ml:         list.filter(s=>s.statusCode==="ML").length
         };
@@ -1160,16 +1169,16 @@ function renderParentView(data) {
   const root = document.getElementById("root");
   const {inst, bname, dateLabel, stats, list, mode, updatedAt} = data;
   const updated = updatedAt ? new Date(updatedAt).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}) : "";
-  const statusColor = {P:"#16a34a",A:"#dc2626",Pe:"#7c3aed",CL:"#1d4ed8",ML:"#b45309",PA:"#d97706",AP:"#d97706",""  :"#999"};
-  const statusEmoji = {P:"✅",A:"❌",Pe:"🔵",CL:"🟡",ML:"🟠",PA:"🕐",AP:"🕐","":"⬜"};
-  const statusLabel = {P:"Present",A:"Absent",Pe:"Permission",CL:"Casual Leave",ML:"Medical Leave",PA:"AN Absent",AP:"FN Absent","":"Not marked"};
+  const statusColor = {P:"#16a34a",A:"#dc2626",Pe:"#7c3aed",CL:"#1d4ed8",ML:"#b45309",HP:"#84cc16",HA:"#f97316",PA:"#d97706",AP:"#d97706",""  :"#999"};
+  const statusEmoji = {P:"✅",A:"❌",Pe:"🔵",CL:"🟡",ML:"🟠",HP:"🕐",HA:"🕐",PA:"🕐",AP:"🕐","":"⬜"};
+  const statusLabel = {P:"Present",A:"Absent",Pe:"Permission",CL:"Casual Leave",ML:"Medical Leave",HP:"Half Day Present",HA:"Half Day Absent",PA:"Half Day",AP:"Half Day","":"Not marked"};
 
   const sc = (code, txt) => '<span style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:20px;padding:3px 10px;font-size:12px;color:' + (statusColor[code]||"#666") + '">' + txt + '</span>';
 
   let listHTML = "";
   if (mode === "absent") {
     // Only show actually absent/leave students — not unmarked
-    const notPresent = list.filter(s=>s.statusCode==="A"||s.statusCode==="CL"||s.statusCode==="ML"||s.statusCode==="PA"||s.statusCode==="AP");
+    const notPresent = list.filter(s=>s.statusCode==="A"||s.statusCode==="CL"||s.statusCode==="ML"||s.statusCode==="HA");
     const unmarked   = list.filter(s=>s.statusCode==="");
     if (notPresent.length === 0 && unmarked.length === 0) {
       listHTML = '<div style="text-align:center;padding:20px;color:#16a34a;font-size:14px;font-weight:600">🎉 All students present today!</div>';
@@ -1185,7 +1194,8 @@ function renderParentView(data) {
   const notMarkedCount = list.filter(s=>s.statusCode==="").length;
   const extraBadges = [
     stats.permission ? "🔵 Permission: " + stats.permission : "",
-    stats.halfDay    ? "🕐 Half day: " + stats.halfDay : "",
+    stats.halfDayPresent ? "🕐 Half Day Present: " + stats.halfDayPresent : "",
+    stats.halfDayAbsent  ? "🕐 Half Day Absent: "  + stats.halfDayAbsent  : "",
     stats.cl         ? "🟡 CL: " + stats.cl : "",
     stats.ml         ? "🟠 ML: " + stats.ml : "",
     notMarkedCount   ? "⬜ Not marked: " + notMarkedCount : ""
@@ -4096,8 +4106,12 @@ async function pushParentLinkData(token, batchId, dk, inst, bname, mode, uid) {
     else if(r.fn==="ML"||r.an==="ML"){status="Medical Leave";statusCode="ML";}
     else if((r.fn==="Pe"||r.an==="Pe")&&fp&&ap){status="Permission";statusCode="Pe";}
     else if(fp&&ap){status="Present";statusCode="P";}
-    else if(fp&&!ap){status="AN Absent";statusCode="PA";}
-    else if(!fp&&ap){status="FN Absent";statusCode="AP";}
+    // Half Day Present: one session present, other NOT marked (not explicitly absent)
+    else if(fp&&!r.an){status="Half Day Present";statusCode="HP";}
+    else if(ap&&!r.fn){status="Half Day Present";statusCode="HP";}
+    // Half Day Absent: one session present, other explicitly absent
+    else if(fp&&r.an==="A"){status="Half Day Absent";statusCode="HA";}
+    else if(ap&&r.fn==="A"){status="Half Day Absent";statusCode="HA";}
     else if(r.fn==="A"||r.an==="A"){status="Absent";statusCode="A";}
     else{status="Not marked";statusCode="";}
     return {name:s.name, adm:s.adm, status, statusCode};
@@ -4109,7 +4123,9 @@ async function pushParentLinkData(token, batchId, dk, inst, bname, mode, uid) {
     permission: list.filter(s=>s.statusCode==="Pe").length,
     cl: list.filter(s=>s.statusCode==="CL").length,
     ml: list.filter(s=>s.statusCode==="ML").length,
-    halfDay: list.filter(s=>s.statusCode==="PA"||s.statusCode==="AP").length,
+    halfDayPresent: list.filter(s=>s.statusCode==="HP").length,
+    halfDayAbsent:  list.filter(s=>s.statusCode==="HA").length,
+    halfDay: list.filter(s=>s.statusCode==="HP"||s.statusCode==="HA").length,
     total: students.length
   };
 
