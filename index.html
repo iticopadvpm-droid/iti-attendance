@@ -2736,27 +2736,24 @@ function buildShareText(dk, bname, inst, dateLabel, total, mode) {
       if(r.fn==="CL"||r.an==="CL"){clList.push(entry);return;}
       if(r.fn==="ML"||r.an==="ML"){mlList.push(entry);return;}
       if(r.fn==="Pe"||r.an==="Pe"){if(fp&&ap){permission.push(entry);return;}}
-      if(fp&&ap) return; // full present - skip
-      if(fp&&r.an==="A"){halfAN.push(entry);return;}  // FN present, AN explicitly absent
-      if(!fp&&ap&&r.fn==="A"){halfFN.push(entry);return;} // FN explicitly absent, AN present
-      if(fp&&!r.an){notMarked.push(entry);return;}  // FN present, AN not marked → not absent
-      if(!r.fn&&ap){notMarked.push(entry);return;}  // AN present, FN not marked → not absent
+      if(fp&&ap) return;
+      if(fp&&!ap){halfAN.push(entry);return;}
+      if(!fp&&ap){halfFN.push(entry);return;}
       if(r.fn==="A"||r.an==="A"){absent.push(entry);return;}
       if(!r.fn&&!r.an){notMarked.push(entry);return;}
     });
     const presentCount=students.filter(s=>{const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};return isP(r.fn)&&isP(r.an);}).length;
-    const halfPresentCount=students.filter(s=>{const r=(S.attendance[dk]||{})[s.id]||{fn:"",an:""};return (isP(r.fn)&&!r.an)||(isP(r.an)&&!r.fn);}).length;
 
     if(absent.length)    msg += "*ABSENT (" + absent.length + "):*" + NL + absent.join(NL) + NL + NL;
-    if(halfFN.length)    msg += "*FN ABSENT / AN Present (" + halfFN.length + "):*" + NL + halfFN.join(NL) + NL + NL;
-    if(halfAN.length)    msg += "*AN ABSENT / FN Present (" + halfAN.length + "):*" + NL + halfAN.join(NL) + NL + NL;
+    if(halfFN.length)    msg += "*FN ABSENT (" + halfFN.length + "):*" + NL + halfFN.join(NL) + NL + NL;
+    if(halfAN.length)    msg += "*AN ABSENT (" + halfAN.length + "):*" + NL + halfAN.join(NL) + NL + NL;
     if(permission.length)msg += "*PERMISSION (" + permission.length + "):*" + NL + permission.join(NL) + NL + NL;
     if(clList.length)    msg += "*CASUAL LEAVE (" + clList.length + "):*" + NL + clList.join(NL) + NL + NL;
     if(mlList.length)    msg += "*MEDICAL LEAVE (" + mlList.length + "):*" + NL + mlList.join(NL) + NL + NL;
     if(notMarked.length) msg += "*NOT MARKED (" + notMarked.length + "):*" + NL + notMarked.join(NL) + NL + NL;
 
     msg += LINE + NL;
-    msg += "Present: " + presentCount + (halfPresentCount?" | Half Day: "+halfPresentCount:"") + " | Total: " + total;
+    msg += "Present: " + presentCount + " | Total: " + total;
   } else {
     students.forEach((s,i)=>{
       const st=statusOf(s);
@@ -3504,13 +3501,8 @@ async function handleClick(e){
   if(a==="mark-sess"){
     const{sid,dk,sess,val}=btn.dataset;
     const cur=(S.attendance[dk]||{})[sid]||{fn:"",an:""};
-    let fn=sess==="fn"?val:cur.fn;
-    let an=sess==="an"?val:cur.an;
-    // If marking one session as Present via split button,
-    // clear the other session if it was A (avoid Half Day Absent confusion)
-    // Instructor can explicitly re-mark the other session if needed
-    if(sess==="fn"&&isP(val)&&an==="A") an="";
-    if(sess==="an"&&isP(val)&&fn==="A") fn="";
+    const fn=sess==="fn"?val:cur.fn;
+    const an=sess==="an"?val:cur.an;
     const lbl=currentUserLabel();
     const upd=buildAttRecord(fn,an,lbl.name,lbl.id,cur);
     if(!S.attendance[dk])S.attendance[dk]={};
