@@ -545,10 +545,11 @@ async function loadAttendanceMonth(year, month) {
   Object.keys(S.attendance).forEach(dk => {
     if(dk >= from && dk <= to) delete S.attendance[dk];
   });
-  // Use documentId range query — efficient, no full collection fetch
-  const q = query(attColRef(), where(documentId(), '>=', from), where(documentId(), '<=', to));
-  const snap = await getDocs(q);
-  snap.docs.forEach(d => { S.attendance[d.id] = d.data(); });
+  // Fetch all and filter client-side — works without Firestore index
+  const snap = await getDocs(attColRef());
+  snap.docs.forEach(d => {
+    if(d.id >= from && d.id <= to) S.attendance[d.id] = d.data();
+  });
 }
 
 async function saveAttendanceFS(dk, sid, fn, an, meta) {
