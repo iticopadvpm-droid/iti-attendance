@@ -219,9 +219,9 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 .att-quick-btn.ML{background:#fef3c7;color:#b45309;border-color:#fcd34d}
 /* Split button — same size as original, top half=FN, bottom half=AN */
 .split-btn{position:relative;padding:0;border-radius:6px;border:1px solid var(--border2);cursor:pointer;overflow:hidden;display:inline-flex;flex-direction:column;font-size:13px;font-weight:600;min-width:48px;height:36px;flex-shrink:0;transition:transform .1s}
-.split-btn .split-top,.split-btn .split-bot{flex:1;width:100%;display:block;cursor:pointer;transition:background .1s}
+.split-btn .split-top,.split-btn .split-bot{flex:1;width:100%;display:block;cursor:pointer;transition:background .1s;position:relative;z-index:3}
 .split-btn .split-top{border-bottom:1px solid rgba(0,0,0,.1)}
-.split-btn .split-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;pointer-events:none;z-index:2}
+.split-btn .split-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;pointer-events:none;z-index:2;user-select:none}
 .split-btn:active{transform:scale(.95)}
 .split-top.P{background:#dcfce7}.split-bot.P{background:#dcfce7}
 .split-top.A{background:#fee2e2}.split-bot.A{background:#fee2e2}
@@ -1808,9 +1808,9 @@ function renderAttendance(){
       const topCls=fnMatch?v:"none";
       const botCls=anMatch?v:"none";
       return`<div class="split-btn ${stateCls}" title="▲ FN  ▼ AN">
-        <div class="split-top ${topCls}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="fn" data-val="${v}"></div>
-        <span class="split-label">${v}</span>
-        <div class="split-bot ${botCls}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="an" data-val="${v}"></div>
+        <div class="split-top ${topCls}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="fn" data-val="${v}" style="position:relative;z-index:3"></div>
+        <span class="split-label" style="pointer-events:none;z-index:1">${v}</span>
+        <div class="split-bot ${botCls}" data-action="mark-sess" data-sid="${s.id}" data-dk="${dk}" data-sess="an" data-val="${v}" style="position:relative;z-index:3"></div>
       </div>`;
     }).join("");
 
