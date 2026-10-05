@@ -591,6 +591,45 @@ async function markAllFS(dk, studentIds, fn, an, lbl) {
 
 
 
+
+// ============================================================
+// BATCH-LEVEL POSSIBLE (per session)
+// A session (FN/AN) on a working day counts as possible for ALL students
+// in the batch if at least ONE student in that batch is marked for it.
+// Sundays & holidays are never counted. Days nobody marked are ignored.
+// ============================================================
+function isNonWorkingDay(dk){
+  const p=String(dk).split("-").map(Number);
+  if(p.length!==3||!p[0]||!p[1]||!p[2]) return true;
+  return new Date(p[0],p[1]-1,p[2]).getDay()===0 || !!S.holidays[dk];
+}
+function batchSessions(batchId){
+  const ids=new Set(S.students.filter(s=>s.batchId===batchId).map(s=>s.id));
+  const out={};
+  for(const [dk,rec] of Object.entries(S.attendance)){
+    if(!rec||isNonWorkingDay(dk)) continue;
+    let fn=false, an=false;
+    for(const [sid,r] of Object.entries(rec)){
+      if(!ids.has(sid)||!r||typeof r!=="object") continue;
+      if(r.fn) fn=true;
+      if(r.an) an=true;
+      if(fn&&an) break;
+    }
+    if(fn||an) out[dk]={fn,an};
+  }
+  return out;
+}
+function studentPossPres(sid, sessMap, from, to){
+  let poss=0, pres=0;
+  for(const [dk,se] of Object.entries(sessMap)){
+    if((from&&dk<from)||(to&&dk>to)) continue;
+    const r=(S.attendance[dk]||{})[sid]||{};
+    if(se.fn){ poss+=0.5; if(isP(r.fn)) pres+=0.5; }
+    if(se.an){ poss+=0.5; if(isP(r.an)) pres+=0.5; }
+  }
+  return {poss,pres};
+}
+
 // ============================================================
 // REPORT CALCULATIONS (client-side from cached S.attendance)
 // ============================================================
@@ -598,27 +637,19 @@ function calcMonthlyReport(batchId, year, month, includeSF=true) {
   const students = S.students.filter(s=>s.batchId===batchId);
   const firstDay = `${year}-${pad(month+1)}-01`;
   const lastDay  = `${year}-${pad(month+1)}-${pad(daysInMonth(year,month))}`;
-
+  const sess = batchSessions(batchId);
   return students.map(s => {
-    let mPoss=0,mPres=0,cumPoss=0,cumPres=0;
-    for (const [dk,rec] of Object.entries(S.attendance)) {
-      if (!rec[s.id]) continue;
-      const r = rec[s.id];
-      if (!r.fn && !r.an) continue;
-      const poss = (r.fn?0.5:0)+(r.an?0.5:0);
-      const pres = ((r.fn==="P"||r.fn==="Pe")?0.5:0)+((r.an==="P"||r.an==="Pe")?0.5:0);
-      if (dk >= firstDay && dk <= lastDay) { mPoss+=poss; mPres+=pres; }
-      if (dk <= lastDay) { cumPoss+=poss; cumPres+=pres; }
-    }
-    // Add shopfloor credits (no impact on possible)
+    const m  = studentPossPres(s.id, sess, firstDay, lastDay);
+    const cu = studentPossPres(s.id, sess, null, lastDay);
+    // Shopfloor credits add to present only (no impact on possible)
     const mSF   = includeSF ? sfCreditsRange(s.id, firstDay, lastDay) : 0;
     const cumSF = includeSF ? sfCredits(s.id, lastDay) : 0;
-    const cumPresTotal = cumPres + cumSF;
+    const cumPresTotal = cu.pres + cumSF;
     return {
       id:s.id, adm:s.adm, name:s.name,
-      monthPoss:mPoss, monthPres:mPres, monthSF:mSF,
-      cumPoss, cumPres:cumPresTotal, cumSF,
-      pct: cumPoss>0 ? Math.round(cumPresTotal/cumPoss*100) : 0
+      monthPoss:m.poss, monthPres:m.pres, monthSF:mSF,
+      cumPoss:cu.poss, cumPres:cumPresTotal, cumSF,
+      pct: cu.poss>0 ? Math.round(cumPresTotal/cu.poss*100) : 0
     };
   });
 }
@@ -679,26 +710,19 @@ async function loadAllAttendance() {
 
 function calcHalfYearReport(batchId, h1s, h1e, h2s, h2e, includeSF=true) {
   const students = S.students.filter(s=>s.batchId===batchId);
+  const sess = batchSessions(batchId);
   return students.map(s => {
-    let h1Poss=0,h1Pres=0,h2Poss=0,h2Pres=0;
-    for (const [dk,rec] of Object.entries(S.attendance)) {
-      if (!rec[s.id]) continue;
-      const r = rec[s.id];
-      if (!r.fn && !r.an) continue;
-      const poss = (r.fn?0.5:0)+(r.an?0.5:0);
-      const pres = ((r.fn==="P"||r.fn==="Pe")?0.5:0)+((r.an==="P"||r.an==="Pe")?0.5:0);
-      if (dk>=h1s&&dk<=h1e){ h1Poss+=poss; h1Pres+=pres; }
-      if (dk>=h2s&&dk<=h2e){ h2Poss+=poss; h2Pres+=pres; }
-    }
+    const h1 = studentPossPres(s.id, sess, h1s, h1e);
+    const h2 = studentPossPres(s.id, sess, h2s, h2e);
     const h1SF = includeSF ? sfCreditsRange(s.id,h1s,h1e) : 0;
     const h2SF = includeSF ? sfCreditsRange(s.id,h2s,h2e) : 0;
-    const h1Total = h1Pres+h1SF, h2Total = h2Pres+h2SF;
+    const h1Total = h1.pres+h1SF, h2Total = h2.pres+h2SF;
     return {
       id:s.id, adm:s.adm, name:s.name,
-      h1Poss, h1Pres:h1Total, h1SF,
-      h1Pct:h1Poss>0?Math.round(h1Total/h1Poss*100):0,
-      h2Poss, h2Pres:h2Total, h2SF,
-      h2Pct:h2Poss>0?Math.round(h2Total/h2Poss*100):0
+      h1Poss:h1.poss, h1Pres:h1Total, h1SF,
+      h1Pct:h1.poss>0?Math.round(h1Total/h1.poss*100):0,
+      h2Poss:h2.poss, h2Pres:h2Total, h2SF,
+      h2Pct:h2.poss>0?Math.round(h2Total/h2.poss*100):0
     };
   });
 }
@@ -1524,7 +1548,7 @@ async function submitPin(){
 // LOAD ALL DATA
 // ============================================================
 async function loadAll(){
-  await Promise.all([loadBatches(), loadStudents(), loadShopfloor(), loadAcdData()]);
+  await Promise.all([loadBatches(), loadStudents(), loadShopfloor(), loadAcdData(), loadHolidays()]);
   // Load this month's attendance
   await loadAttendanceMonth(S.attState.year, S.attState.month);
   // Set defaults
@@ -1684,14 +1708,10 @@ function renderDashboard(){
   const todayAtt=S.attendance[dk]||{};
   const markedToday=Object.keys(todayAtt).filter(k=>k!=="__updated"&&k!=="__name__"&&k!=="_updated").length;
   let below80=0;
+  const dashSess={};
   for(const s of S.students){
-    let poss=0,pres=0;
-    for(const rec of Object.values(S.attendance)){
-      if(!rec[s.id])continue;
-      const r=rec[s.id];
-      if(r.fn)poss+=0.5; if(r.an)poss+=0.5;
-      if(r.fn==="P"||r.fn==="Pe")pres+=0.5; if(r.an==="P"||r.an==="Pe")pres+=0.5;
-    }
+    if(!dashSess[s.batchId]) dashSess[s.batchId]=batchSessions(s.batchId);
+    const {poss,pres}=studentPossPres(s.id,dashSess[s.batchId]);
     if(poss>0&&Math.round(pres/poss*100)<PCT_WARN)below80++;
   }
   const batchRows=S.batches.map(b=>{
@@ -1886,7 +1906,7 @@ ${students.length?`
   <span>Present: <strong style="color:var(--success)">${full}</strong></span>
   <span>FN✓: <strong>${fnP}</strong></span>
   <span>AN✓: <strong>${anP}</strong></span>
-  <span>Absent: <strong style="color:var(--danger)">${students.length-full}</strong></span>
+  <span>Absent: <strong style="color:var(--danger)">${students.filter(s=>{const r=(S.attendance[dk]||{})[s.id]||{};return ["A","CL","ML"].includes(r.fn)||["A","CL","ML"].includes(r.an);}).length}</strong></span>
   <span>Unmarked: <strong style="color:var(--warn)">${unmarked}</strong></span>
   <span style="margin-left:auto;color:var(--text3);font-size:11px">${dk}</span>
 </div>
@@ -2021,7 +2041,8 @@ async function syncAcdMarks() {
     let changed = false;
     Object.entries(data).forEach(([sid,rec])=>{
       if(sid.startsWith("_")) return; // skip meta fields
-      if(!existing[sid] || JSON.stringify(existing[sid])!==JSON.stringify(rec)){
+      const ts=r=>Math.max(r?.at||0,r?.editedAt||0);
+      if(!existing[sid] || (JSON.stringify(existing[sid])!==JSON.stringify(rec) && ts(rec)>ts(existing[sid]))){
         existing[sid] = rec;
         if(!S.attendance[dk]) S.attendance[dk]={};
         S.attendance[dk][sid] = rec;
@@ -2196,9 +2217,9 @@ function getCellMark(fn, an) {
     return {mark:"✗", cls:"mark-x"};                    // P+P
   }
   // FN present, AN absent
-  if (fp && aa) return fpe ? {mark:"P╲",cls:"mark-pe"} : {mark:"╲",cls:"mark-sr"};
+  if (fp && aa) return fpe ? {mark:"P╱",cls:"mark-pe"} : {mark:"╱",cls:"mark-sl"};
   // FN absent, AN present
-  if (fa && ap) return ape ? {mark:"P╱",cls:"mark-pe"} : {mark:"╱",cls:"mark-sl"};
+  if (fa && ap) return ape ? {mark:"P╲",cls:"mark-pe"} : {mark:"╲",cls:"mark-sr"};
   // Only one session marked
   if (fp && !an) return fpe ? {mark:"P",cls:"mark-pe"} : {mark:"╱",cls:"mark-sl"};
   if (!fn && ap) return ape ? {mark:"P",cls:"mark-pe"} : {mark:"╲",cls:"mark-sr"};
@@ -2219,8 +2240,8 @@ function getPrintMark(fn, an) {
     if(ape)      return {mark:"P╲", cls:"mpe"};
     return {mark:"✗",cls:"mx"};
   }
-  if (fp&&aa) return fpe?{mark:"P╲",cls:"mpe"}:{mark:"╲",cls:"msr"};
-  if (fa&&ap) return ape?{mark:"P╱",cls:"mpe"}:{mark:"╱",cls:"msl"};
+  if (fp&&aa) return fpe?{mark:"P╱",cls:"mpe"}:{mark:"╱",cls:"msl"};
+  if (fa&&ap) return ape?{mark:"P╲",cls:"mpe"}:{mark:"╲",cls:"msr"};
   if (fp&&!an) return fpe?{mark:"P",cls:"mpe"}:{mark:"╱",cls:"msl"};
   if (!fn&&ap) return ape?{mark:"P",cls:"mpe"}:{mark:"╲",cls:"msr"};
   if (fa||aa) return {mark:"A",cls:"ma"};
@@ -2247,9 +2268,11 @@ function renderAttBook() {
     return `<th class="ab-num ${cls}" title="${dk}${isHol?" — "+S.holidays[dk].name:""}">${d}<br><span style="font-size:9px;font-weight:400">${dayName}</span></th>`;
   }).join("");
 
-  // Build student rows
+  // Build student rows (batch-level per-session possible)
+  const abSess = batchSessions(batchId);
+  const abFrom = `${year}-${pad(month+1)}-01`, abTo = `${year}-${pad(month+1)}-${pad(totalDays)}`;
   const rows = students.map((s,idx) => {
-    let poss=0, pres=0;
+    const {poss, pres} = studentPossPres(s.id, abSess, abFrom, abTo);
     const cells = days.map(d => {
       const dk = `${year}-${pad(month+1)}-${pad(d)}`;
       const dt = new Date(year, month, d); // local date - safe
@@ -2259,10 +2282,6 @@ function renderAttBook() {
       if (isHol) return `<td class="cell-hol" title="${S.holidays[dk].name}">H</td>`;
       const r = (S.attendance[dk]||{})[s.id]||{fn:"",an:""};
       const {mark,cls} = getCellMark(r.fn, r.an);
-      // Count poss/pres
-      if (r.fn==="CL"||r.fn==="ML") { poss+=1; }
-      else { if(r.fn)poss+=0.5; if(r.an)poss+=0.5; }
-      if(r.fn==="P"||r.fn==="Pe")pres+=0.5; if(r.an==="P"||r.an==="Pe")pres+=0.5;
       const bgCls = (r.fn==="A"&&r.an==="A")?"cell-absent":"";
       return `<td class="${bgCls}" title="${dk} FN:${r.fn||"-"} AN:${r.an||"-"}"><span class="${cls}">${mark}</span></td>`;
     }).join("");
@@ -2470,7 +2489,7 @@ function renderSettings(){
     ${acdList.length<200?'<button class="btn btn-primary btn-sm" data-action="acd-add">+ Add ACD</button>':''}
   </div>
   <div class="card-body" style="padding:0">
-    ${acdList.length===0?'<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">No ACD instructors added yet. Add up to 3.</div>':""}
+    ${acdList.length===0?'<div style="text-align:center;padding:20px;color:var(--text3);font-size:13px">No ACD instructors added yet.</div>':""}
     ${acdList.map((acd,idx)=>{
       const bnames=acd.batchIds?.map(bid=>{const b=S.batches.find(x=>x.id===bid);return b?b.name:"?"}).join(", ")||"None";
       return '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">'
@@ -2542,11 +2561,11 @@ ${acdLog.length>0?
   <div class="card-header"><h3>&#128260; Student Sort Order</h3></div>
   <div class="card-body">
     <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:2px solid var(--border);border-radius:8px;${S.sortBy==='name'?'border-color:var(--primary);background:var(--primary-light)':''}">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:2px solid var(--border);border-radius:8px;${S.sortBy==='name'?'border-color:var(--accent);background:var(--accent-bg)':''}">
         <input type="radio" name="sort-by" value="name" ${S.sortBy==='name'?'checked':''} style="width:auto"/>
         <div><div style="font-weight:600;font-size:13px">Sort by Name</div><div style="font-size:11px;color:var(--text3)">Alphabetical A→Z</div></div>
       </label>
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:2px solid var(--border);border-radius:8px;${S.sortBy==='adm'?'border-color:var(--primary);background:var(--primary-light)':''}">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 16px;border:2px solid var(--border);border-radius:8px;${S.sortBy==='adm'?'border-color:var(--accent);background:var(--accent-bg)':''}">
         <input type="radio" name="sort-by" value="adm" ${S.sortBy==='adm'?'checked':''} style="width:auto"/>
         <div><div style="font-weight:600;font-size:13px">Sort by Admission No</div><div style="font-size:11px;color:var(--text3)">Numeric order</div></div>
       </label>
@@ -2720,8 +2739,10 @@ function buildShareText(dk, bname, inst, dateLabel, total, mode) {
     if(r.fn==="ML"||r.an==="ML") return{emoji:"ML",label:"Medical Leave",sort:5};
     if((r.fn==="Pe"||r.an==="Pe")&&fp&&ap) return{emoji:"Pe",label:"Permission",sort:3};
     if(fp&&ap) return{emoji:"P",label:"Present",sort:1};
-    if(fp&&!ap) return{emoji:"P/",label:"FN Present / AN Absent",sort:6};
-    if(!fp&&ap) return{emoji:"/P",label:"FN Absent / AN Present",sort:6};
+    if(fp&&r.an==="A") return{emoji:"P/",label:"FN Present / AN Absent",sort:6};
+    if(ap&&r.fn==="A") return{emoji:"/P",label:"FN Absent / AN Present",sort:6};
+    if(fp&&!r.an) return{emoji:"P/-",label:"FN Present / AN not marked",sort:6};
+    if(ap&&!r.fn) return{emoji:"-/P",label:"AN Present / FN not marked",sort:6};
     if(r.fn==="A"||r.an==="A") return{emoji:"A",label:"Absent",sort:2};
     return{emoji:"-",label:"Not marked",sort:7};
   };
@@ -2917,32 +2938,15 @@ function printAttBook() {
     return c;
   }
 
-  // Month poss/pres per student
+  // Month poss/pres per student (batch-level per-session possible)
+  const pbSess = batchSessions(batchId);
   function monthStats(sid){
-    let poss=0,pres=0;
-    days.forEach(d=>{
-      const dt=new Date(year,month,d);
-      if(dt.getDay()===0||S.holidays[dk(d)]) return;
-      const r=(S.attendance[dk(d)]||{})[sid]||{fn:"",an:""};
-      if(r.fn==="CL"||r.fn==="ML"){poss+=1;}
-      else{if(r.fn)poss+=0.5; if(r.an)poss+=0.5;}
-      if(isP(r.fn))pres+=0.5; if(isP(r.an))pres+=0.5;
-    });
-    return{poss,pres};
+    return studentPossPres(sid, pbSess, `${year}-${pad(month+1)}-01`, `${year}-${pad(month+1)}-${pad(totalDays)}`);
   }
 
   // Cumulative poss/pres
   function cumStats(sid){
-    const lastDay=`${year}-${pad(month+1)}-${pad(totalDays)}`;
-    let poss=0,pres=0;
-    for(const [d,rec] of Object.entries(S.attendance)){
-      if(d>lastDay) continue;
-      const r=rec[sid]; if(!r||(!r.fn&&!r.an)) continue;
-      if(r.fn==="CL"||r.fn==="ML"){poss+=1;}
-      else{if(r.fn)poss+=0.5; if(r.an)poss+=0.5;}
-      if(isP(r.fn))pres+=0.5; if(isP(r.an))pres+=0.5;
-    }
-    return{poss,pres};
+    return studentPossPres(sid, pbSess, null, `${year}-${pad(month+1)}-${pad(totalDays)}`);
   }
 
   // CL eligibility (standard = 8 per year, show remaining)
@@ -2969,8 +2973,8 @@ function printAttBook() {
       if(ape)      return{t:"P╲",c:"#6d28d9"};
       return{t:"✗",c:"#111"};
     }
-    if(fp&&aa) return fpe?{t:"P╲",c:"#6d28d9"}:{t:"╲",c:"#111"};
-    if(fa&&ap) return ape?{t:"P╱",c:"#6d28d9"}:{t:"╱",c:"#111"};
+    if(fp&&aa) return fpe?{t:"P╱",c:"#6d28d9"}:{t:"╱",c:"#111"};
+    if(fa&&ap) return ape?{t:"P╲",c:"#6d28d9"}:{t:"╲",c:"#111"};
     if(fp&&!an) return fpe?{t:"P",c:"#6d28d9"}:{t:"╱",c:"#111"};
     if(!fn&&ap) return ape?{t:"P",c:"#6d28d9"}:{t:"╲",c:"#111"};
     if(fa||aa) return{t:"A",c:"#c00"};
@@ -3769,6 +3773,7 @@ async function handleClick(e){
     try{
       await loadAllAttendance();
       await loadShopfloor();
+      await loadHolidays();
       const includeSF=S.printDetails.includeSF;
       const data=calcMonthlyReport(S.monthRep.batchId,S.monthRep.year,S.monthRep.month,includeSF);
       const b=S.batches.find(x=>x.id===S.monthRep.batchId);
@@ -3811,6 +3816,7 @@ ${includeSF?'<span class="badge badge-accent" style="margin-left:8px;font-size:1
     try{
       await loadAllAttendance();
       await loadShopfloor();
+      await loadHolidays();
       const includeSF=S.printDetails.includeSF;
       const data=calcHalfYearReport(S.hrState.batchId,S.hrState.h1s,S.hrState.h1e,S.hrState.h2s,S.hrState.h2e,includeSF);
       const b=S.batches.find(x=>x.id===S.hrState.batchId);
@@ -4028,6 +4034,7 @@ ${includeSF?'<span class="badge badge-accent" style="margin-left:8px;font-size:1
 
 // make closeModal global for inline onclick
 window.closeModal = closeModal;
+window.toast = toast;
 window.switchTab = (tab) => renderLogin(tab);
 window.toggleSidebar = function() {
   const sb = document.getElementById("main-sidebar");
@@ -4134,8 +4141,8 @@ async function pushParentLinkData(token, batchId, dk, inst, bname, mode, uid) {
   });
 
   const stats = {
-    present: list.filter(s=>s.statusCode==="P").length,
-    absent:  list.filter(s=>s.statusCode==="A").length,
+    present: list.filter(s=>s.statusCode==="P"||s.statusCode==="HP").length,
+    absent:  list.filter(s=>["A","CL","ML","HA"].indexOf(s.statusCode)>-1).length,
     permission: list.filter(s=>s.statusCode==="Pe").length,
     cl: list.filter(s=>s.statusCode==="CL").length,
     ml: list.filter(s=>s.statusCode==="ML").length,
@@ -4188,9 +4195,9 @@ function showParentLinkModal(link, token, mode, bname, dk) {
       ">Copy</button>
     </div>
   </div>
-  <p class="text-xs text-muted mb12">Parents can open this link on any phone or browser — no login needed. The link shows live attendance and auto-refreshes every minute.</p>
+  <p class="text-xs text-muted mb12">Parents can open this link on any phone or browser — no login needed. The link shows live attendance and updates instantly.</p>
   <div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:var(--radius);padding:8px 10px;font-size:11px;color:var(--warn)">
-    ⚠️ Generating a new link will expire this one. Share it before generating another.
+    ✅ This link is permanent for this batch — parents can bookmark it.
   </div>
 </div>
 <div class="modal-footer">
@@ -4227,7 +4234,7 @@ function parentLinkModal() {
     </label>
   </div>
   <div style="background:var(--warn-bg);border:1px solid var(--warn-border);border-radius:var(--radius);padding:8px 10px;font-size:11px;color:var(--warn);margin-top:12px">
-    ⚠️ Any previously generated link will expire when you create a new one.
+    ✅ Each batch keeps the same permanent link — regenerating does not change it.
   </div>
 </div>
 <div class="modal-footer">
