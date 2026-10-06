@@ -1306,6 +1306,15 @@ checkParentView().then(isParentView => {
 // ============================================================
 // LOGIN SCREEN — Email / Password
 // ============================================================
+function switchLoginTab(tab){
+  const typed=["li-email","fg-email","rg-email"].map(id=>document.getElementById(id)?.value||"").find(v=>v.trim())||"";
+  renderLogin(tab);
+  if(typed){
+    const id=tab==="login"?"li-email":tab==="forgot"?"fg-email":"rg-email";
+    const el=document.getElementById(id); if(el) el.value=typed;
+  }
+}
+
 function renderLogin(mode="login"){
   document.getElementById("root").innerHTML=`
 <div class="login-screen">
@@ -1336,6 +1345,7 @@ function renderLogin(mode="login"){
         <select id="rg-pos">${POSITIONS.map(p=>`<option value="${p.val}">${p.label} (${p.val})</option>`).join("")}</select>
       </div>
       <div class="form-group"><label class="form-label">Email</label><input id="rg-email" type="email" placeholder="your@email.com" autocomplete="email"/></div>
+      <div class="form-group"><label class="form-label">Confirm email</label><input id="rg-email2" type="email" placeholder="Type email again" autocomplete="off"/></div>
       <div class="grid2" style="gap:8px">
         <div class="form-group"><label class="form-label">Password</label><input id="rg-pass" type="password" placeholder="Min 6 characters" autocomplete="new-password"/></div>
         <div class="form-group"><label class="form-label">Confirm password</label><input id="rg-pass2" type="password" placeholder="Repeat" autocomplete="new-password"/></div>
@@ -1353,14 +1363,14 @@ function renderLogin(mode="login"){
       <p class="text-sm text-muted mb12">Enter your registered email. We will send a password reset link.</p>
       <div class="form-group"><label class="form-label">Email</label><input id="fg-email" type="email" placeholder="your@email.com"/></div>
       <button class="btn btn-primary" id="btn-forgot" style="width:100%">Send Reset Link</button>
-      <p id="fg-ok" class="text-sm text-success mt8" style="display:none">Reset link sent! Check your email.</p>
+      <p id="fg-ok" class="text-sm text-success mt8" style="display:none;line-height:1.5"></p>
     </div>
 
     <p id="login-err" class="text-sm text-danger mt8" style="display:none"></p>
   </div>
 </div>`;
 
-  window.switchTab = (tab) => renderLogin(tab);
+  window.switchTab = switchLoginTab;
 
   const errEl = document.getElementById("login-err");
   const showErr = (msg) => { errEl.textContent=msg; errEl.style.display="block"; };
@@ -1369,7 +1379,7 @@ function renderLogin(mode="login"){
   // Sign in
   document.getElementById("btn-login")?.addEventListener("click", async()=>{
     hideErr();
-    const email=document.getElementById("li-email").value.trim();
+    const email=document.getElementById("li-email").value.trim().toLowerCase();
     const pass=document.getElementById("li-pass").value;
     if(!email||!pass){showErr("Enter email and password");return;}
     setLoading(true);
@@ -1394,7 +1404,8 @@ function renderLogin(mode="login"){
     const inst=document.getElementById("rg-inst").value.trim();
     const trade=document.getElementById("rg-trade").value.trim().toUpperCase();
     const pos=document.getElementById("rg-pos").value;
-    const email=document.getElementById("rg-email").value.trim();
+    const email=document.getElementById("rg-email").value.trim().toLowerCase();
+    const email2=document.getElementById("rg-email2").value.trim().toLowerCase();
     const pass=document.getElementById("rg-pass").value;
     const pass2=document.getElementById("rg-pass2").value;
     const pin=document.getElementById("rg-pin").value.trim();
@@ -1402,6 +1413,7 @@ function renderLogin(mode="login"){
     if(!name){showErr("Enter your name");return;}
     if(!trade){showErr("Enter your trade");return;}
     if(!email){showErr("Enter email");return;}
+    if(email!==email2){showErr("Emails do not match — check for typos. This email is used to recover your password.");return;}
     if(pass.length<6){showErr("Password must be at least 6 characters");return;}
     if(pass!==pass2){showErr("Passwords do not match");return;}
     if(!/^\d{4}$/.test(pin)){showErr("PIN must be exactly 4 digits");return;}
@@ -1428,16 +1440,23 @@ function renderLogin(mode="login"){
   // Forgot password
   document.getElementById("btn-forgot")?.addEventListener("click", async()=>{
     hideErr();
-    const email=document.getElementById("fg-email").value.trim();
+    const okEl=document.getElementById("fg-ok");
+    okEl.style.display="none";
+    const email=document.getElementById("fg-email").value.trim().toLowerCase();
     if(!email){showErr("Enter your email");return;}
     setLoading(true);
     try{
       await sendPasswordResetEmail(auth,email);
-      document.getElementById("fg-ok").style.display="block";
+      okEl.innerHTML='If <strong>'+email.replace(/[<>&"]/g,"")+'</strong> is a registered account, a reset link has been sent. '
+        +'Check <strong>Inbox, Spam and Promotions</strong> (sender: noreply). '
+        +'If nothing arrives in 5 minutes, the email may be misspelled or not registered &mdash; contact the administrator.';
+      okEl.style.display="block";
     }catch(e){
       const msg={
         "auth/user-not-found":"No account with this email.",
-        "auth/invalid-email":"Invalid email address."
+        "auth/invalid-email":"Invalid email address.",
+        "auth/too-many-requests":"Too many requests. Please wait a few minutes and try again.",
+        "auth/network-request-failed":"No internet connection. Please try again."
       }[e.code]||e.message;
       showErr(msg);
     }
@@ -4035,7 +4054,7 @@ ${includeSF?'<span class="badge badge-accent" style="margin-left:8px;font-size:1
 // make closeModal global for inline onclick
 window.closeModal = closeModal;
 window.toast = toast;
-window.switchTab = (tab) => renderLogin(tab);
+window.switchTab = switchLoginTab;
 window.toggleSidebar = function() {
   const sb = document.getElementById("main-sidebar");
   const ov = document.getElementById("mobile-overlay");
