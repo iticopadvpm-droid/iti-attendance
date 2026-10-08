@@ -2119,7 +2119,7 @@ async function clearSFDay(dk, studentIds) {
   } catch(e) { setSyncStatus("error"); throw e; }
 }
 
-let sfState = { batchId:localStorage.getItem('iti_default_batch')||"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate(), view:"mark", incAtt:(()=>{try{return localStorage.getItem("iti_sf_incatt")==="1";}catch(e){return false;}})() };
+let sfState = { batchId:localStorage.getItem('iti_default_batch')||"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate(), view:"mark", incAtt:(()=>{try{return localStorage.getItem("iti_sf_incatt")==="1";}catch(e){return false;}})(), onlySF:(()=>{try{return localStorage.getItem("iti_sf_only")==="1";}catch(e){return false;}})() };
 
 async function loadShopfloorData() {
   setLoading(true, "Loading shopfloor...");
@@ -2190,6 +2190,11 @@ function sfBookData() {
     const regC = incAtt ? studentPossPres(st.id, sess, null, to).pres : 0;
     return { idx, st, cells, month: sfM+regM, cum: sfC+regC, sfM, regM };
   });
+  if (sfState.onlySF) {
+    const keep = rows.filter(r => r.cells.some(c => c.sf > 0));
+    keep.forEach((r,i) => { r.idx = i; });
+    rows.length = 0; keep.forEach(r => rows.push(r));
+  }
   const dayTotals = days.map((d,i) => rows.reduce((a,r)=>a+r.cells[i].reg+r.cells[i].sf,0));
   return {days, dkOf, rows, dayTotals, totalDays};
 }
@@ -2218,7 +2223,7 @@ function renderSFBook() {
     return `<tr><td class="ab-sl">${r.idx+1}</td><td class="ab-name">${r.st.name}</td>${cells}
       <td class="ab-stat" style="color:#b45309" title="${sfState.incAtt?"Attendance "+r.regM+" + Shopfloor "+(+r.sfM.toFixed(2)):""}">${r.month?(+r.month.toFixed(2)):"-"}</td>
       <td class="ab-stat">${r.cum?(+r.cum.toFixed(2)):"-"}</td></tr>`;
-  }).join("") || `<tr><td colspan="${totalDays+4}" style="padding:20px;text-align:center;color:var(--text3)">No students in this batch.</td></tr>`;
+  }).join("") || `<tr><td colspan="${totalDays+4}" style="padding:20px;text-align:center;color:var(--text3)">${sfState.onlySF?"No student has shopfloor credit in this month.":"No students in this batch."}</td></tr>`;
   const foot = rows.length ? `<tr style="background:#f0f4f8;font-weight:700"><td></td><td class="ab-name">Day total</td>${dayTotals.map(t=>`<td style="font-size:10px">${t?+t.toFixed(2):""}</td>`).join("")}<td class="ab-stat">${+rows.reduce((a,r)=>a+r.month,0).toFixed(2)}</td><td class="ab-stat"></td></tr>` : "";
   return `
 ${sfTabs()}
@@ -2229,6 +2234,7 @@ ${sfTabs()}
       <div><label class="form-label">Month</label><select style="width:130px" id="sf-month">${mOpts}</select></div>
       <div><label class="form-label">Year</label><input type="number" id="sf-year" value="${year}" style="width:85px"/></div>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:18px"><input type="checkbox" id="sf-incatt" ${sfState.incAtt?"checked":""} style="width:auto;cursor:pointer"/> Include regular attendance</label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;margin-top:18px"><input type="checkbox" id="sf-only" ${sfState.onlySF?"checked":""} style="width:auto;cursor:pointer"/> Only students with shopfloor this month</label>
       <button class="btn btn-primary btn-sm" style="margin-top:18px" data-action="sf-print">🖨️ Print</button>
     </div>
   </div>
@@ -2279,7 +2285,7 @@ th{border:1px solid #000;background:#d0d0d0;padding:2px;font-size:8px;text-align
 .sign div{min-width:170px;text-align:center;border-top:1px solid #000;padding-top:3px;font-size:10px;font-weight:700}
 .foot{margin-top:8px;font-size:9px;color:#555}
 @page{margin:8mm;size:A4 landscape}</style></head><body>
-<div class="header"><h1>${inst}</h1><h2>Trade: ${batch?.trade||""} &mdash; ${batch?.name||""}</h2><h3>Shopfloor / Extra Class Book${sfState.incAtt?" (with attendance)":""} &mdash; ${MONTHS[month]} ${year}</h3><hr>
+<div class="header"><h1>${inst}</h1><h2>Trade: ${batch?.trade||""} &mdash; ${batch?.name||""}</h2><h3>Shopfloor / Extra Class Book${sfState.incAtt?" (with attendance)":""}${sfState.onlySF?" — shopfloor students only":""} &mdash; ${MONTHS[month]} ${year}</h3><hr>
 <div style="font-size:10px">Academic Year: ${batch?.year||""} &nbsp;|&nbsp; ${instrLabel}</div></div>
 <table><thead><tr><th>#</th><th style="text-align:left;min-width:130px">Name</th>${th}<th>Month</th><th>Total</th></tr></thead><tbody>${tr}${totRow}</tbody></table>
 <div class="foot">${sfState.incAtt?"Top line = regular attendance (1 = full day, .5 = one session); second line = shopfloor credit. ":""}¼ = 0.25 &nbsp;⅓ = 0.33 &nbsp;½ = 0.50 &nbsp;1 = full day &mdash; credits add to Present only</div>
@@ -3532,6 +3538,7 @@ function handleChange(e){
   else if(t.id==="hr-pd-sf"){S.printDetails.includeSF=t.checked;}
   // Shopfloor filters
   else if(t.id==="sf-incatt"){sfState.incAtt=!!t.checked;try{localStorage.setItem("iti_sf_incatt",t.checked?"1":"0");}catch(err){}loadShopfloorData();}
+  else if(t.id==="sf-only"){sfState.onlySF=!!t.checked;try{localStorage.setItem("iti_sf_only",t.checked?"1":"0");}catch(err){}refreshPage();}
   else if(t.id==="sf-batch"){sfState.batchId=t.value;localStorage.setItem('iti_default_batch',t.value);refreshPage();}
   else if(t.id==="sf-month"){sfState.month=parseInt(t.value);loadShopfloorData();}
   else if(t.id==="sf-year"){sfState.year=parseInt(t.value)||TODAY.getFullYear();loadShopfloorData();}
