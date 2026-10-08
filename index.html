@@ -1786,10 +1786,10 @@ function renderStudents(){
   const filt=S.studFilter==="all"?S.students:S.students.filter(s=>s.batchId===S.studFilter);
   const rows=filt.map(s=>{
     const b=S.batches.find(x=>x.id===s.batchId);
-    return`<tr><td>${s.adm}</td><td class="fw500">${s.name}</td><td>${b?b.name:"-"}</td>
+    return`<tr><td>${s.adm}</td><td class="fw500">${s.name}</td><td>${b?b.name:"-"}</td><td>${s.parentPhone?esc(s.parentPhone):"&mdash;"}</td>
     <td><button class="btn-icon" data-action="edit-student" data-id="${s.id}">✏️</button>
     <button class="btn-icon" data-action="del-student" data-id="${s.id}">🗑️</button></td></tr>`;
-  }).join("")||`<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text3)">No students found.</td></tr>`;
+  }).join("")||`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">No students found.</td></tr>`;
   return`
 <div class="flex flex-between mb16">
   <select style="width:220px" id="batch-filter"><option value="all">All batches</option>${bOpts}</select>
@@ -1800,7 +1800,7 @@ function renderStudents(){
   </div>
 </div>
 <div class="card p0"><table>
-  <thead><tr><th>Adm No</th><th>Name</th><th>Batch</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Adm No</th><th>Name</th><th>Batch</th><th>Parent Phone</th><th>Actions</th></tr></thead>
   <tbody>${rows}</tbody>
 </table></div>`;
 }
@@ -2887,6 +2887,8 @@ function batchModal(id){
 </div>`);
 }
 
+const esc = v => String(v==null?"":v).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
 function studentModal(id){
   const s=S.students.find(x=>x.id===id)||{};
   const bOpts=S.batches.map(b=>`<option value="${b.id}"${s.batchId===b.id?" selected":""}>${b.name}</option>`).join("");
@@ -2896,6 +2898,7 @@ function studentModal(id){
   <div class="form-group"><label class="form-label">Admission number</label><input id="m-sadm" value="${s.adm||""}" placeholder="e.g. 593"/></div>
   <div class="form-group"><label class="form-label">Student name</label><input id="m-sname" value="${s.name||""}" placeholder="Full name in CAPITALS"/></div>
   <div class="form-group"><label class="form-label">Batch</label><select id="m-sbatch"><option value="">Select batch...</option>${bOpts}</select></div>
+  <div class="form-group"><label class="form-label">Parent phone <span class="text-muted" style="font-weight:400">(optional)</span></label><input id="m-sphone" type="tel" inputmode="tel" value="${esc(s.parentPhone||"")}" placeholder="e.g. 9847000000"/></div>
 </div>
 <div class="modal-footer">
   <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -3489,6 +3492,7 @@ async function handleClick(e){
     const adm=document.getElementById("m-sadm").value.trim();
     const nm=document.getElementById("m-sname").value.trim().toUpperCase();
     const bid=document.getElementById("m-sbatch").value;
+    const phone=document.getElementById("m-sphone").value.trim();
     if(!nm||!bid){toast("Name and batch required","error");return;}
     // Check duplicate admission number within same batch
     const editingId = btn.dataset.id||"";
@@ -3499,10 +3503,11 @@ async function handleClick(e){
     setLoading(true);
     try{
       const id=editingId||uid();
-      const student={id,adm,name:nm,batchId:bid};
+      const old=S.students.find(x=>x.id===id)||{};
+      const student={...old,id,adm,name:nm,batchId:bid,parentPhone:phone};
       await saveStudentFS(student);
       if(!editingId) S.students.push(student);
-      else{const s=S.students.find(x=>x.id===editingId);if(s){s.adm=adm;s.name=nm;s.batchId=bid;}}
+      else{const s=S.students.find(x=>x.id===editingId);if(s){s.adm=adm;s.name=nm;s.batchId=bid;s.parentPhone=phone;}}
       sortStudents();
       closeModal();refreshPage();toast("Student saved");
     }catch(e){toast(e.message,"error");}
