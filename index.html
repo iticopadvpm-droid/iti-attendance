@@ -2155,7 +2155,11 @@ function sfCreditsRange(sid, fromDk, toDk) {
 
 function sfTabs() {
   const on = "background:var(--primary,#1a73e8);color:#fff;border-color:var(--primary,#1a73e8)";
-  return `<div class="flex gap8 mb12">
+  return `<div style="background:#fff7ed;border:1px solid #fb923c;border-left:4px solid #ea580c;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:13px;color:#7c2d12;display:flex;gap:10px;align-items:flex-start">
+  <span style="font-size:18px;line-height:1.2">🚧</span>
+  <div><strong>Shopfloor section is under construction.</strong> Features and calculations here are still being built and tested, so please double-check the figures before using them in official records.</div>
+</div>
+<div class="flex gap8 mb12">
   <button class="btn btn-secondary btn-sm" style="${sfState.view!=="book"?on:""}" data-action="sf-view" data-view="mark">✏️ Mark credits</button>
   <button class="btn btn-secondary btn-sm" style="${sfState.view==="book"?on:""}" data-action="sf-view" data-view="book">📖 Shopfloor book</button>
 </div>`;
