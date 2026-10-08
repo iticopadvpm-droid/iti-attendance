@@ -1755,6 +1755,7 @@ function renderDashboard(){
     <button class="btn btn-secondary" data-action="go-students">👥 Add students</button>
     <button class="btn btn-secondary" data-action="go-monthly">📋 Monthly report</button>
     <button class="btn btn-secondary" data-action="go-halfyear">📈 H1/H2 report</button>
+        <button class="btn btn-secondary" data-action="go-attbook">📖 Attendance book</button>
   </div>
 </div>`;
 }
@@ -3434,6 +3435,7 @@ async function handleClick(e){
   if(a==="go-attendance"){S.page="attendance"; loadAttPageData();return;}
   if(a==="go-monthly")   {S.page="monthly";   refreshPage();return;}
   if(a==="go-halfyear")  {S.page="halfyear";  refreshPage();return;}
+  if(a==="go-attbook")   {S.page="attbook";   loadAttBookData();return;}
 
   // Batch CRUD
   if(a==="add-batch")  {batchModal("");return;}
