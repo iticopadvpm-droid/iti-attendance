@@ -2119,7 +2119,7 @@ async function clearSFDay(dk, studentIds) {
   } catch(e) { setSyncStatus("error"); throw e; }
 }
 
-let sfState = { batchId:localStorage.getItem('iti_default_batch')||"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate() };
+let sfState = { batchId:localStorage.getItem('iti_default_batch')||"", year:TODAY.getFullYear(), month:TODAY.getMonth(), day:TODAY.getDate(), view:"mark" };
 
 async function loadShopfloorData() {
   setLoading(true, "Loading shopfloor...");
@@ -2151,7 +2151,124 @@ function sfCreditsRange(sid, fromDk, toDk) {
   return total;
 }
 
+function sfTabs() {
+  const on = "background:var(--primary,#1a73e8);color:#fff;border-color:var(--primary,#1a73e8)";
+  return `<div class="flex gap8 mb12">
+  <button class="btn btn-secondary btn-sm" style="${sfState.view!=="book"?on:""}" data-action="sf-view" data-view="mark">✏️ Mark credits</button>
+  <button class="btn btn-secondary btn-sm" style="${sfState.view==="book"?on:""}" data-action="sf-view" data-view="book">📖 Shopfloor book</button>
+</div>`;
+}
+
+function sfCellLabel(v) {
+  const f = SF_VALUES.find(x=>Math.abs(x.val-parseFloat(v))<0.001);
+  return f ? f.label : String(parseFloat(v));
+}
+
+function sfBookData() {
+  const {batchId, year, month} = sfState;
+  const totalDays = daysInMonth(year, month);
+  const days = Array.from({length:totalDays},(_,i)=>i+1);
+  const dkOf = d => `${year}-${pad(month+1)}-${pad(d)}`;
+  const from = dkOf(1), to = dkOf(totalDays);
+  const students = S.students.filter(st=>st.batchId===batchId);
+  const rows = students.map((st,idx)=>({
+    idx, st,
+    cells: days.map(d => { const v=(S.shopfloor[dkOf(d)]||{})[st.id]; return v?parseFloat(v):0; }),
+    month: sfCreditsRange(st.id, from, to),
+    cum: sfCredits(st.id, to)
+  }));
+  const dayTotals = days.map(d => rows.reduce((a,r)=>a+r.cells[d-1],0));
+  return {days, dkOf, rows, dayTotals, totalDays};
+}
+
+function renderSFBook() {
+  const {batchId, year, month} = sfState;
+  const bOpts = S.batches.map(b=>`<option value="${b.id}"${batchId===b.id?" selected":""}>${b.name}</option>`).join("");
+  const mOpts = MONTHS.map((m,i)=>`<option value="${i}"${month===i?" selected":""}>${m}</option>`).join("");
+  const {days, dkOf, rows, dayTotals, totalDays} = sfBookData();
+  const head = days.map(d=>{
+    const dow=new Date(year,month,d).getDay(), dk=dkOf(d);
+    const cls = dow===0?"day-sun":S.holidays[dk]?"day-hol":dow===6?"day-sat":"";
+    return `<th class="ab-num ${cls}" title="${dk}">${d}<br><span style="font-size:9px;font-weight:400">${["Su","Mo","Tu","We","Th","Fr","Sa"][dow]}</span></th>`;
+  }).join("");
+  const body = rows.map(r=>{
+    const cells = r.cells.map((v,i)=>{
+      const d=i+1, dk=dkOf(d), dow=new Date(year,month,d).getDay();
+      const bg = v ? "background:#fef08a;color:#713f12;font-weight:700" : dow===0 ? "background:#fff1f1" : S.holidays[dk] ? "background:#fff7ed" : "";
+      return `<td style="${bg}" title="${dk}">${v?sfCellLabel(v):""}</td>`;
+    }).join("");
+    return `<tr><td class="ab-sl">${r.idx+1}</td><td class="ab-name">${r.st.name}</td>${cells}
+      <td class="ab-stat" style="color:#b45309">${r.month?r.month.toFixed(2):"-"}</td>
+      <td class="ab-stat">${r.cum?r.cum.toFixed(2):"-"}</td></tr>`;
+  }).join("") || `<tr><td colspan="${totalDays+4}" style="padding:20px;text-align:center;color:var(--text3)">No students in this batch.</td></tr>`;
+  const foot = rows.length ? `<tr style="background:#f0f4f8;font-weight:700"><td></td><td class="ab-name">Day total</td>${dayTotals.map(t=>`<td style="font-size:10px">${t?+t.toFixed(2):""}</td>`).join("")}<td class="ab-stat">${rows.reduce((a,r)=>a+r.month,0).toFixed(2)}</td><td class="ab-stat"></td></tr>` : "";
+  return `
+${sfTabs()}
+<div class="card mb12">
+  <div class="card-body" style="padding:12px 14px">
+    <div class="flex flex-wrap" style="gap:10px;align-items:flex-end">
+      <div><label class="form-label">Batch</label><select style="width:200px" id="sf-batch">${bOpts}</select></div>
+      <div><label class="form-label">Month</label><select style="width:130px" id="sf-month">${mOpts}</select></div>
+      <div><label class="form-label">Year</label><input type="number" id="sf-year" value="${year}" style="width:85px"/></div>
+      <button class="btn btn-primary btn-sm" style="margin-top:18px" data-action="sf-print">🖨️ Print</button>
+    </div>
+  </div>
+</div>
+<div class="ab-wrap"><table class="ab-table">
+<thead><tr><th class="ab-sl">#</th><th class="ab-name" style="text-align:left">Name</th>${head}<th class="ab-stat">Month</th><th class="ab-stat">Total</th></tr></thead>
+<tbody>${body}</tbody><tfoot>${foot}</tfoot>
+</table></div>
+<div class="card mt12" style="padding:10px 14px;font-size:11px;color:var(--text3)">
+  <strong>Shopfloor credits:</strong> ¼ = 0.25 &nbsp;⅓ = 0.33 &nbsp;½ = 0.50 &nbsp;1 = full day. <strong>Month</strong> = credits this month, <strong>Total</strong> = cumulative up to month end. Credits add to Present only, not Possible.
+</div>`;
+}
+
+function printSFBook() {
+  const {batchId, year, month} = sfState;
+  const {days, dkOf, rows, dayTotals} = sfBookData();
+  const pd = S.printDetails;
+  const inst = S.profile?.institute || "Govt ITI Dhanuvachapuram";
+  const batch = S.batches.find(b=>b.id===batchId);
+  const instrLabel = `${pd.name||S.profile?.name||""} (${pd.position||S.profile?.position||"SI"}, ${pd.trade||S.profile?.trade||""})`;
+  const now = new Date().toLocaleDateString("en-IN");
+  const th = days.map(d=>{
+    const dow=new Date(year,month,d).getDay();
+    const bg=dow===0?"background:#ffd6d6;":S.holidays[dkOf(d)]?"background:#ffd9b3;":"";
+    return `<th style="${bg}min-width:16px;font-size:7px;padding:2px 1px">${d}<br><span style="font-weight:400;font-size:6px">${["Su","Mo","Tu","We","Th","Fr","Sa"][dow]}</span></th>`;
+  }).join("");
+  const tr = rows.map(r=>{
+    const cells = r.cells.map((v,i)=>{
+      const dow=new Date(year,month,i+1).getDay();
+      const bg=dow===0?"background:#fff0f0;":S.holidays[dkOf(i+1)]?"background:#fff3e0;":"";
+      return `<td style="${bg}border:1px solid #000;text-align:center;font-size:8px;font-weight:700">${v?sfCellLabel(v):""}</td>`;
+    }).join("");
+    return `<tr><td style="border:1px solid #000;text-align:center;font-size:8px">${r.idx+1}</td><td style="border:1px solid #000;font-size:9px;padding:1px 4px;white-space:nowrap">${r.st.name}</td>${cells}<td style="border:1px solid #000;text-align:center;font-size:9px;font-weight:700">${r.month?r.month.toFixed(2):""}</td><td style="border:1px solid #000;text-align:center;font-size:9px">${r.cum?r.cum.toFixed(2):""}</td></tr>`;
+  }).join("");
+  const totRow = `<tr style="background:#eee"><td style="border:1px solid #000"></td><td style="border:1px solid #000;font-size:8px;font-weight:700;padding:1px 4px">Day total</td>${dayTotals.map(t=>`<td style="border:1px solid #000;text-align:center;font-size:7px">${t?+t.toFixed(2):""}</td>`).join("")}<td style="border:1px solid #000;text-align:center;font-size:9px;font-weight:700">${rows.reduce((a,r)=>a+r.month,0).toFixed(2)}</td><td style="border:1px solid #000"></td></tr>`;
+  const win = window.open("","_blank","width=1200,height=800");
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Shopfloor Book - ${MONTHS[month]} ${year}</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;color:#000;padding:8mm}
+.header{text-align:center;margin-bottom:8px}
+.header h1{font-size:14px;text-transform:uppercase}.header h2{font-size:12px;margin:2px 0}.header h3{font-size:11px;margin:2px 0}
+.header hr{border:none;border-top:2px solid #000;margin:5px 0 3px}
+table{border-collapse:collapse;width:100%}
+th{border:1px solid #000;background:#d0d0d0;padding:2px;font-size:8px;text-align:center}
+.sign{margin-top:30px;display:flex;justify-content:space-between}
+.sign div{min-width:170px;text-align:center;border-top:1px solid #000;padding-top:3px;font-size:10px;font-weight:700}
+.foot{margin-top:8px;font-size:9px;color:#555}
+@page{margin:8mm;size:A4 landscape}</style></head><body>
+<div class="header"><h1>${inst}</h1><h2>Trade: ${batch?.trade||""} &mdash; ${batch?.name||""}</h2><h3>Shopfloor / Extra Class Book &mdash; ${MONTHS[month]} ${year}</h3><hr>
+<div style="font-size:10px">Academic Year: ${batch?.year||""} &nbsp;|&nbsp; ${instrLabel}</div></div>
+<table><thead><tr><th>#</th><th style="text-align:left;min-width:130px">Name</th>${th}<th>Month</th><th>Total</th></tr></thead><tbody>${tr}${totRow}</tbody></table>
+<div class="foot">¼ = 0.25 &nbsp;⅓ = 0.33 &nbsp;½ = 0.50 &nbsp;1 = full day &mdash; credits add to Present only</div>
+<div class="sign"><div>${pd.printDate?"Date: "+now:"Date:"}</div><div>${instrLabel}</div><div>Group Instructor</div><div>Principal</div></div>
+<script>window.onload=()=>{window.print()}<\/script></body></html>`);
+  win.document.close();
+}
+
 function renderShopfloor() {
+  if (sfState.view === "book") return renderSFBook();
   const {batchId, year, month, day} = sfState;
   const maxDay = daysInMonth(year, month);
   const d = Math.min(day, maxDay);
@@ -2191,6 +2308,7 @@ function renderShopfloor() {
   }).join("");
 
   return `
+${sfTabs()}
 <div class="card mb12">
   <div class="card-body" style="padding:12px 14px">
     <div style="background:#fef9c3;border:1px solid #fde047;border-radius:var(--radius);padding:8px 12px;margin-bottom:12px;font-size:12px;color:#713f12">
@@ -3555,6 +3673,8 @@ async function handleClick(e){
     return;
   }
   // Shopfloor marking
+  if(a==="sf-view"){sfState.view=btn.dataset.view==="book"?"book":"mark";refreshPage();return;}
+  if(a==="sf-print"){printSFBook();return;}
   if(a==="mark-sf"){
     const{sid,dk,val}=btn.dataset;
     const numVal = val==="clear" ? null : parseFloat(val);
