@@ -1786,7 +1786,7 @@ function renderStudents(){
   const filt=S.studFilter==="all"?S.students:S.students.filter(s=>s.batchId===S.studFilter);
   const rows=filt.map(s=>{
     const b=S.batches.find(x=>x.id===s.batchId);
-    return`<tr><td>${s.adm}</td><td class="fw500">${s.name}</td><td>${b?b.name:"-"}</td><td>${s.parentPhone?esc(s.parentPhone):"&mdash;"}</td>
+    return`<tr><td>${s.adm}</td><td class="fw500">${s.name}</td><td>${b?b.name:"-"}</td><td style="white-space:nowrap">${s.parentPhone?`<a href="tel:${esc(String(s.parentPhone).replace(/[^\d+]/g,""))}" style="color:var(--primary,#1a73e8);text-decoration:none;font-weight:500" title="Call parent">📞 ${esc(s.parentPhone)}</a>`:"&mdash;"}</td>
     <td><button class="btn-icon" data-action="edit-student" data-id="${s.id}">✏️</button>
     <button class="btn-icon" data-action="del-student" data-id="${s.id}">🗑️</button></td></tr>`;
   }).join("")||`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">No students found.</td></tr>`;
