@@ -603,6 +603,22 @@ function isNonWorkingDay(dk){
   if(p.length!==3||!p[0]||!p[1]||!p[2]) return true;
   return new Date(p[0],p[1]-1,p[2]).getDay()===0 || !!S.holidays[dk];
 }
+// Reason a date is a non-working day (holiday name / Sunday), or "" if it is a working day
+function nonWorkingReason(dk){
+  const h=S.holidays[dk];
+  if(h) return "a holiday"+(h.name?": "+h.name:"");
+  const p=String(dk).split("-").map(Number);
+  if(p.length===3&&new Date(p[0],p[1]-1,p[2]).getDay()===0) return "a Sunday";
+  return "";
+}
+const nwApproved=new Set(); // dates the user already chose to mark anyway (this page session)
+function guardNonWorking(dk){
+  const why=nonWorkingReason(dk);
+  if(!why||nwApproved.has(dk)) return true;
+  const ok=window.confirm("⚠️ "+dk.split("-").reverse().join("-")+" is "+why+".\n\nAttendance marked on a non-working day is not counted in the register (possible/present days).\n\nMark attendance anyway?");
+  if(ok) nwApproved.add(dk);
+  return ok;
+}
 function batchSessions(batchId){
   const ids=new Set(S.students.filter(s=>s.batchId===batchId).map(s=>s.id));
   const out={};
@@ -1894,7 +1910,14 @@ function renderAttendance(){
 </div>`;
   }).join("");
 
+  const nwWhy=nonWorkingReason(dk);
+  const nwBanner=nwWhy?`<div style="background:#fff7ed;border:1px solid #fb923c;border-left:4px solid #ea580c;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:13px;color:#7c2d12;display:flex;gap:10px;align-items:flex-start">
+  <span style="font-size:18px;line-height:1.2">🟠</span>
+  <div><strong>${d} ${MONTHS[month]} ${year} (${dowLabel}) is ${esc(nwWhy)}.</strong> Attendance marked on this day is not counted in the register. You will be asked to confirm before marking.</div>
+</div>`:"";
+
   return`
+${nwBanner}
 <div class="card mb12">
   <div class="card-body" style="padding:12px 14px">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -3703,6 +3726,7 @@ async function handleClick(e){
   if(a==="mark-sess"){
     e.stopPropagation();
     const{sid,dk,sess,val}=btn.dataset;
+    if(!guardNonWorking(dk)) return;
     const cur=(S.attendance[dk]||{})[sid]||{fn:"",an:""};
     let fn=sess==="fn"?val:cur.fn;
     let an=sess==="an"?val:cur.an;
@@ -3922,6 +3946,7 @@ async function handleClick(e){
   }
   if(a==="mark-both-val"){
     const{sid,dk,val}=btn.dataset;
+    if(!guardNonWorking(dk)){closeModal();return;}
     if(!S.attendance[dk])S.attendance[dk]={};
     S.attendance[dk][sid]={fn:val,an:val};
     closeModal();refreshPage();
@@ -3938,6 +3963,7 @@ async function handleClick(e){
     const{batchId,year,month,day}=S.attState;
     const d=Math.min(day,daysInMonth(year,month));
     const dk=`${year}-${pad(month+1)}-${pad(d)}`;
+    if(!guardNonWorking(dk)) return;
     const students=S.students.filter(s=>s.batchId===batchId);
     if(!S.attendance[dk])S.attendance[dk]={};
     students.forEach(s=>S.attendance[dk][s.id]={fn:v,an:v});
