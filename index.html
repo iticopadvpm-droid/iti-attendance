@@ -2465,6 +2465,7 @@ function renderAttBook() {
   const abFrom = `${year}-${pad(month+1)}-01`, abTo = `${year}-${pad(month+1)}-${pad(totalDays)}`;
   const rows = students.map((s,idx) => {
     const {poss, pres} = studentPossPres(s.id, abSess, abFrom, abTo);
+    const cum = studentPossPres(s.id, abSess, null, abTo);
     const cells = days.map(d => {
       const dk = `${year}-${pad(month+1)}-${pad(d)}`;
       const dt = new Date(year, month, d); // local date - safe
@@ -2479,15 +2480,19 @@ function renderAttBook() {
     }).join("");
     const pct = poss>0?Math.round(pres/poss*100):0;
     const pctCls = pct<PCT_WARN?"pct-critical":pct<PCT_WARN+5?"pct-warn":"pct-ok";
+    const cuPct = cum.poss>0?Math.round(cum.pres/cum.poss*100):0;
+    const cuCls = cuPct<PCT_WARN?"pct-critical":cuPct<PCT_WARN+5?"pct-warn":"pct-ok";
     return `<tr>
       <td class="ab-sl">${idx+1}</td>
       <td class="ab-name">${s.name}</td>
       ${cells}
       <td class="ab-stat">${poss}</td>
       <td class="ab-stat">${pres}</td>
+      <td class="ab-stat">${cum.pres}</td>
       <td class="ab-stat ${pctCls}">${pct}%</td>
+      <td class="ab-stat ${cuCls}">${cuPct}%</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="${totalDays+5}" style="padding:20px;text-align:center;color:var(--text3)">No students in this batch.</td></tr>`;
+  }).join("") || `<tr><td colspan="${totalDays+7}" style="padding:20px;text-align:center;color:var(--text3)">No students in this batch.</td></tr>`;
 
   // Total FN / Total AN rows (students present per session each working day)
   const abTot = (sess, label, bg) => {
@@ -2499,7 +2504,7 @@ function renderAttBook() {
       let cnt=0; students.forEach(st=>{ if(isP((rec[st.id]||{})[sess])) cnt++; });
       return `<td style="font-weight:700;font-size:11px;height:26px">${cnt}</td>`;
     }).join("");
-    return `<tr style="background:${bg}"><td colspan="2" style="text-align:right;padding-right:8px;font-weight:700;font-size:11px;height:26px">${label}</td>${tds}<td colspan="3"></td></tr>`;
+    return `<tr style="background:${bg}"><td colspan="2" style="text-align:right;padding-right:8px;font-weight:700;font-size:11px;height:26px">${label}</td>${tds}<td colspan="5"></td></tr>`;
   };
   const totFoot = students.length ? `<tfoot>${abTot("fn","Total FN","#e8f5e9")}${abTot("an","Total AN","#e3f2fd")}</tfoot>` : "";
 
@@ -2541,6 +2546,7 @@ function renderAttBook() {
   </div>
 </div>
 
+<div style="margin-bottom:6px;font-size:12px;color:var(--text2)">Monthly Possible: <strong>${students.length?studentPossPres(students[0].id,abSess,abFrom,abTo).poss:0}</strong> &nbsp;|&nbsp; Cumulative Possible: <strong>${students.length?Math.max(...students.map(st=>studentPossPres(st.id,abSess,null,abTo).poss)):0}</strong> &nbsp;|&nbsp; <span style="color:var(--text3)">M % = month, Cu % = cumulative up to month end</span></div>
 <div class="ab-wrap">
 <table class="ab-table">
 <thead>
@@ -2549,8 +2555,10 @@ function renderAttBook() {
     <th class="ab-name" style="text-align:left">Name</th>
     ${dayHeaders}
     <th class="ab-stat">Poss</th>
-    <th class="ab-stat">Pres</th>
-    <th class="ab-stat">%</th>
+    <th class="ab-stat">Present</th>
+    <th class="ab-stat">Cum. Present</th>
+    <th class="ab-stat">M %</th>
+    <th class="ab-stat">Cu %</th>
   </tr>
 </thead>
 <tbody>${rows}</tbody>${totFoot}
@@ -3210,6 +3218,8 @@ function printAttBook() {
     const cl=clCount(s.id); const ml=mlCount(s.id);
     const pct=cs.poss>0?Math.round(cs.pres/cs.poss*100):0;
     const pctColor=pct<PCT_WARN?"#c00":pct<PCT_WARN+5?"#b45309":"#166534";
+    const mPct=ms.poss>0?Math.round(ms.pres/ms.poss*100):0;
+    const mPctColor=mPct<PCT_WARN?"#c00":mPct<PCT_WARN+5?"#b45309":"#166534";
     const clElig=Math.max(0,CL_ELIGIBLE-cl);
 
     const cells=days.map(d=>{
@@ -3233,6 +3243,7 @@ function printAttBook() {
       ${cells}
       <td style="text-align:center;font-size:9px;font-weight:700">${ms.pres}</td>
       <td style="text-align:center;font-size:9px;font-weight:700">${cs.pres}</td>
+      <td style="text-align:center;font-size:9px;font-weight:700;color:${mPctColor}">${mPct}%</td>
       <td style="text-align:center;font-size:9px;font-weight:700;color:${pctColor}">${pct}%</td>
       <td style="min-width:40px"></td>
     </tr>`;
@@ -3246,7 +3257,7 @@ function printAttBook() {
       if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
       return `<td style="text-align:center;font-size:8px;font-weight:700">${dayTotal(d,"fn")}</td>`;
     }).join("")}
-    <td colspan="4"></td>
+    <td colspan="5"></td>
   </tr>`;
 
   // Sign row FN
@@ -3257,7 +3268,7 @@ function printAttBook() {
       if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
       return `<td style="border-bottom:1px solid #000"></td>`;
     }).join("")}
-    <td colspan="4"></td>
+    <td colspan="5"></td>
   </tr>`;
 
   // Daily totals row AN
@@ -3268,7 +3279,7 @@ function printAttBook() {
       if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
       return `<td style="text-align:center;font-size:8px;font-weight:700">${dayTotal(d,"an")}</td>`;
     }).join("")}
-    <td colspan="4"></td>
+    <td colspan="5"></td>
   </tr>`;
 
   // Sign row AN
@@ -3279,7 +3290,7 @@ function printAttBook() {
       if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
       return `<td style="border-bottom:1px solid #000"></td>`;
     }).join("")}
-    <td colspan="4"></td>
+    <td colspan="5"></td>
   </tr>`;
 
   // Group instructor sign row
@@ -3290,7 +3301,7 @@ function printAttBook() {
       if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
       return `<td style="border-bottom:1px solid #000"></td>`;
     }).join("")}
-    <td colspan="4"></td>
+    <td colspan="5"></td>
   </tr>`;
 
   // Principal sign row
@@ -3301,7 +3312,7 @@ function printAttBook() {
       if(isSun||isHol) return `<td style="background:#f5f5f5"></td>`;
       return `<td style="border-bottom:1px solid #000"></td>`;
     }).join("")}
-    <td colspan="4"></td>
+    <td colspan="5"></td>
   </tr>`;
 
   // Cumulative possible (total possible sessions up to this month)
@@ -3358,9 +3369,10 @@ td{border:1px solid #000;padding:1px;height:18px;vertical-align:middle}
         <th rowspan="2" style="min-width:14px;font-size:6px">CL<br>Used</th>
         <th rowspan="2" style="min-width:14px;font-size:6px">ML<br>Used</th>
         ${dayHeaders}
-        <th rowspan="2" style="min-width:20px;font-size:7px">Pre-<br>sent</th>
-        <th rowspan="2" style="min-width:24px;font-size:7px">Present<br>Cumul.</th>
-        <th rowspan="2" style="min-width:22px;font-size:7px">%</th>
+        <th rowspan="2" style="min-width:20px;font-size:7px">Present</th>
+        <th rowspan="2" style="min-width:24px;font-size:7px">Cum.<br>Present</th>
+        <th rowspan="2" style="min-width:22px;font-size:7px">M %</th>
+        <th rowspan="2" style="min-width:22px;font-size:7px">Cu %</th>
         <th rowspan="2" style="min-width:40px;font-size:7px">Remarks</th>
       </tr>
     </thead>
