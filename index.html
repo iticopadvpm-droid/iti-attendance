@@ -256,6 +256,8 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 .ab-sl{min-width:28px!important;font-size:11px;color:#6b7280}
 .ab-num{min-width:26px!important;font-size:10px;color:#374151}
 .ab-stat{min-width:38px!important;font-size:11px;font-weight:600}
+.ab-stat.ab-s{min-width:30px!important;padding:0 2px}
+.ab-table th.ab-grp{background:#e2e8f0;font-size:10px;border-bottom:1px solid #94a3b8}
 /* Day cell marks */
 .mark-x{font-weight:900;font-size:15px;color:#111;line-height:1}
 .mark-sl{font-weight:900;font-size:14px;color:#111;line-height:1}
@@ -2457,7 +2459,7 @@ function renderAttBook() {
     const isHol = !!S.holidays[dk];
     const dayName = ["Su","Mo","Tu","We","Th","Fr","Sa"][dow];
     const cls = isSun?"day-sun":isHol?"day-hol":dow===6?"day-sat":"";
-    return `<th class="ab-num ${cls}" title="${dk}${isHol?" — "+S.holidays[dk].name:""}">${d}<br><span style="font-size:9px;font-weight:400">${dayName}</span></th>`;
+    return `<th class="ab-num ${cls}" rowspan="2" title="${dk}${isHol?" — "+S.holidays[dk].name:""}">${d}<br><span style="font-size:9px;font-weight:400">${dayName}</span></th>`;
   }).join("");
 
   // Build student rows (batch-level per-session possible)
@@ -2486,11 +2488,11 @@ function renderAttBook() {
       <td class="ab-sl">${idx+1}</td>
       <td class="ab-name">${s.name}</td>
       ${cells}
-      <td class="ab-stat">${poss}</td>
-      <td class="ab-stat">${pres}</td>
-      <td class="ab-stat">${cum.pres}</td>
-      <td class="ab-stat ${pctCls}">${pct}%</td>
-      <td class="ab-stat ${cuCls}">${cuPct}%</td>
+      <td class="ab-stat ab-s">${poss}</td>
+      <td class="ab-stat ab-s">${pres}</td>
+      <td class="ab-stat ab-s ${pctCls}">${pct}%</td>
+      <td class="ab-stat ab-s">${cum.pres}</td>
+      <td class="ab-stat ab-s ${cuCls}">${cuPct}%</td>
     </tr>`;
   }).join("") || `<tr><td colspan="${totalDays+7}" style="padding:20px;text-align:center;color:var(--text3)">No students in this batch.</td></tr>`;
 
@@ -2551,14 +2553,18 @@ function renderAttBook() {
 <table class="ab-table">
 <thead>
   <tr>
-    <th class="ab-sl">#</th>
-    <th class="ab-name" style="text-align:left">Name</th>
+    <th class="ab-sl" rowspan="2">#</th>
+    <th class="ab-name" rowspan="2" style="text-align:left">Name</th>
     ${dayHeaders}
-    <th class="ab-stat">Poss</th>
-    <th class="ab-stat">Present</th>
-    <th class="ab-stat">Cum. Present</th>
-    <th class="ab-stat">M %</th>
-    <th class="ab-stat">Cu %</th>
+    <th class="ab-stat ab-s" rowspan="2">Poss</th>
+    <th class="ab-grp" colspan="2">Month</th>
+    <th class="ab-grp" colspan="2">Cumulative</th>
+  </tr>
+  <tr>
+    <th class="ab-stat ab-s">Pres</th>
+    <th class="ab-stat ab-s">%</th>
+    <th class="ab-stat ab-s">Pres</th>
+    <th class="ab-stat ab-s">%</th>
   </tr>
 </thead>
 <tbody>${rows}</tbody>${totFoot}
@@ -3175,7 +3181,7 @@ function printAttBook() {
     const isSun=dow===0; const isHol=!!S.holidays[dk(d)];
     const dn=["Su","Mo","Tu","We","Th","Fr","Sa"][dow];
     const bg=isSun?"#ffd6d6":isHol?"#ffd9b3":dow===6?"#fffbe6":"";
-    return `<th style="min-width:16px;font-size:7px;padding:2px 1px;${bg?"background:"+bg+";":""}text-align:center">${d}<br><span style="font-weight:400;font-size:6px">${dn}</span></th>`;
+    return `<th rowspan="2" style="min-width:16px;font-size:7px;padding:2px 1px;${bg?"background:"+bg+";":""}text-align:center">${d}<br><span style="font-weight:400;font-size:6px">${dn}</span></th>`;
   }
 
   // Cell mark
@@ -3242,8 +3248,8 @@ function printAttBook() {
       <td style="text-align:center;font-size:8px;color:#b45309">${ml}</td>
       ${cells}
       <td style="text-align:center;font-size:9px;font-weight:700">${ms.pres}</td>
-      <td style="text-align:center;font-size:9px;font-weight:700">${cs.pres}</td>
       <td style="text-align:center;font-size:9px;font-weight:700;color:${mPctColor}">${mPct}%</td>
+      <td style="text-align:center;font-size:9px;font-weight:700">${cs.pres}</td>
       <td style="text-align:center;font-size:9px;font-weight:700;color:${pctColor}">${pct}%</td>
       <td style="min-width:40px"></td>
     </tr>`;
@@ -3369,11 +3375,15 @@ td{border:1px solid #000;padding:1px;height:18px;vertical-align:middle}
         <th rowspan="2" style="min-width:14px;font-size:6px">CL<br>Used</th>
         <th rowspan="2" style="min-width:14px;font-size:6px">ML<br>Used</th>
         ${dayHeaders}
-        <th rowspan="2" style="min-width:20px;font-size:7px">Present</th>
-        <th rowspan="2" style="min-width:24px;font-size:7px">Cum.<br>Present</th>
-        <th rowspan="2" style="min-width:22px;font-size:7px">M %</th>
-        <th rowspan="2" style="min-width:22px;font-size:7px">Cu %</th>
+        <th colspan="2" style="font-size:7px;background:#d0d0d0">Month</th>
+        <th colspan="2" style="font-size:7px;background:#d0d0d0">Cumulative</th>
         <th rowspan="2" style="min-width:40px;font-size:7px">Remarks</th>
+      </tr>
+      <tr>
+        <th style="min-width:18px;font-size:7px">Pres</th>
+        <th style="min-width:18px;font-size:7px">%</th>
+        <th style="min-width:18px;font-size:7px">Pres</th>
+        <th style="min-width:18px;font-size:7px">%</th>
       </tr>
     </thead>
     <tbody>
