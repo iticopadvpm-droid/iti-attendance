@@ -274,6 +274,7 @@ nav{flex:1;padding:8px 6px;overflow-y:auto}
 .day-hol{background:#fed7aa!important;color:#9a3412!important}
 .cell-sun{background:#fff5f5!important}
 .cell-hol{background:#fff7ed!important}
+.cell-pre{background:#eceff1!important;color:#90a4ae}
 .cell-absent{background:#fef2f2}
 /* Print book */
 @media print{
@@ -621,6 +622,16 @@ function guardNonWorking(dk){
   if(ok) nwApproved.add(dk);
   return ok;
 }
+function guardNotAdmitted(sid,dk){
+  const ad=admDateOf(sid);
+  if(!ad||dk>=ad) return true;
+  const key="adm:"+sid+":"+dk;
+  if(nwApproved.has(key)) return true;
+  const st=S.students.find(x=>x.id===sid);
+  const ok=window.confirm("⚠️ "+(st?st.name:"This student")+" is admitted from "+fmtDMY(ad)+".\n\nAttendance before the admission date is not counted.\n\nMark attendance anyway?");
+  if(ok) nwApproved.add(key);
+  return ok;
+}
 function batchSessions(batchId){
   const ids=new Set(S.students.filter(s=>s.batchId===batchId).map(s=>s.id));
   const out={};
@@ -637,10 +648,38 @@ function batchSessions(batchId){
   }
   return out;
 }
+// Optional admission date (YYYY-MM-DD) of a student; "" = counts from the first day
+function admDateOf(sid){
+  const st=S.students.find(x=>x.id===sid);
+  return (st&&st.admDate)||"";
+}
+// Accepts DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY, YYYY-MM-DD or an Excel serial number -> "YYYY-MM-DD" or ""
+function parseAdmDate(v){
+  if(v==null||v==="") return "";
+  if(typeof v==="number"&&v>20000&&v<80000){
+    const d=new Date(Date.UTC(1899,11,30)+Math.round(v)*86400000);
+    return d.getUTCFullYear()+"-"+pad(d.getUTCMonth()+1)+"-"+pad(d.getUTCDate());
+  }
+  const t=String(v).trim();
+  let m=t.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  let y,mo,d;
+  if(m){y=+m[1];mo=+m[2];d=+m[3];}
+  else{
+    m=t.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/);
+    if(!m) return "";
+    d=+m[1];mo=+m[2];y=+m[3];
+  }
+  const dt=new Date(y,mo-1,d);
+  if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d) return "";
+  return y+"-"+pad(mo)+"-"+pad(d);
+}
+const fmtDMY = dk => dk ? String(dk).split("-").reverse().join("-") : "";
 function studentPossPres(sid, sessMap, from, to){
   let poss=0, pres=0;
+  const ad=admDateOf(sid);
   for(const [dk,se] of Object.entries(sessMap)){
     if((from&&dk<from)||(to&&dk>to)) continue;
+    if(ad&&dk<ad) continue; // not admitted yet — not possible for this student
     const r=(S.attendance[dk]||{})[sid]||{};
     if(se.fn){ poss+=0.5; if(isP(r.fn)) pres+=0.5; }
     if(se.an){ poss+=0.5; if(isP(r.an)) pres+=0.5; }
@@ -1804,7 +1843,7 @@ function renderStudents(){
   const filt=S.studFilter==="all"?S.students:S.students.filter(s=>s.batchId===S.studFilter);
   const rows=filt.map(s=>{
     const b=S.batches.find(x=>x.id===s.batchId);
-    return`<tr><td>${s.adm}</td><td class="fw500">${s.name}</td><td>${b?b.name:"-"}</td><td style="white-space:nowrap">${s.parentPhone?`<a href="tel:${esc(String(s.parentPhone).replace(/[^\d+]/g,""))}" style="color:var(--primary,#1a73e8);text-decoration:none;font-weight:500" title="Call parent">📞 ${esc(s.parentPhone)}</a>`:"&mdash;"}</td>
+    return`<tr><td>${s.adm}</td><td class="fw500">${s.name}${s.admDate?`<div style="font-size:10px;font-weight:400;color:var(--text3)">Admitted ${fmtDMY(s.admDate)}</div>`:""}</td><td>${b?b.name:"-"}</td><td style="white-space:nowrap">${s.parentPhone?`<a href="tel:${esc(String(s.parentPhone).replace(/[^\d+]/g,""))}" style="color:var(--primary,#1a73e8);text-decoration:none;font-weight:500" title="Call parent">📞 ${esc(s.parentPhone)}</a>`:"&mdash;"}</td>
     <td><button class="btn-icon" data-action="edit-student" data-id="${s.id}">✏️</button>
     <button class="btn-icon" data-action="del-student" data-id="${s.id}">🗑️</button></td></tr>`;
   }).join("")||`<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">No students found.</td></tr>`;
@@ -1884,7 +1923,7 @@ function renderAttendance(){
   <div class="att-mobile-header" data-action="toggle-expand" data-sid="${s.id}">
     <span class="att-mobile-sl">${idx+1}</span>
     <div style="flex:1;min-width:0">
-      <span class="att-mobile-name">${s.name}</span> <span style="font-size:11px;color:#9ca3af;font-weight:400">${s.adm||""}</span>
+      <span class="att-mobile-name">${s.name}</span> <span style="font-size:11px;color:#9ca3af;font-weight:400">${s.adm||""}</span>${(s.admDate&&dk<s.admDate)?`<span style="font-size:10px;background:#eceff1;color:#546e7a;border-radius:8px;padding:1px 6px;margin-left:4px;white-space:nowrap">Not admitted yet · from ${fmtDMY(s.admDate)}</span>`:""}
       ${byLine}
     </div>
     <span class="att-mobile-status">${chip}</span>
@@ -2208,7 +2247,7 @@ function sfBookData() {
       const dk = dkOf(d);
       const sf = parseFloat((S.shopfloor[dk]||{})[st.id]) || 0;
       let reg = 0;
-      if (incAtt && sess[dk]) {
+      if (incAtt && sess[dk] && !(st.admDate && dk < st.admDate)) {
         const r = (S.attendance[dk]||{})[st.id]||{};
         reg = (isP(r.fn)?0.5:0) + (isP(r.an)?0.5:0);
       }
@@ -2475,6 +2514,7 @@ function renderAttBook() {
       const isHol = !!S.holidays[dk];
       if (isSun) return `<td class="cell-sun" title="Sunday">-</td>`;
       if (isHol) return `<td class="cell-hol" title="${S.holidays[dk].name}">H</td>`;
+      if (s.admDate && dk < s.admDate) return `<td class="cell-pre" title="Not admitted yet (admitted ${fmtDMY(s.admDate)})">–</td>`;
       const r = (S.attendance[dk]||{})[s.id]||{fn:"",an:""};
       const {mark,cls} = getCellMark(r.fn, r.an);
       const bgCls = (r.fn==="A"&&r.an==="A")?"cell-absent":"";
@@ -2548,7 +2588,7 @@ function renderAttBook() {
   </div>
 </div>
 
-<div style="margin-bottom:6px;font-size:12px;color:var(--text2)">Monthly Possible: <strong>${students.length?studentPossPres(students[0].id,abSess,abFrom,abTo).poss:0}</strong> &nbsp;|&nbsp; Cumulative Possible: <strong>${students.length?Math.max(...students.map(st=>studentPossPres(st.id,abSess,null,abTo).poss)):0}</strong> &nbsp;|&nbsp; <span style="color:var(--text3)">M % = month, Cu % = cumulative up to month end</span></div>
+<div style="margin-bottom:6px;font-size:12px;color:var(--text2)">Monthly Possible: <strong>${students.length?Math.max(...students.map(st=>studentPossPres(st.id,abSess,abFrom,abTo).poss)):0}</strong> &nbsp;|&nbsp; Cumulative Possible: <strong>${students.length?Math.max(...students.map(st=>studentPossPres(st.id,abSess,null,abTo).poss)):0}</strong> &nbsp;|&nbsp; <span style="color:var(--text3)">M % = month, Cu % = cumulative up to month end</span></div>
 <div class="ab-wrap">
 <table class="ab-table">
 <thead>
@@ -3099,6 +3139,8 @@ function studentModal(id){
   <div class="form-group"><label class="form-label">Student name</label><input id="m-sname" value="${s.name||""}" placeholder="Full name in CAPITALS"/></div>
   <div class="form-group"><label class="form-label">Batch</label><select id="m-sbatch"><option value="">Select batch...</option>${bOpts}</select></div>
   <div class="form-group"><label class="form-label">Parent phone <span class="text-muted" style="font-weight:400">(optional)</span></label><input id="m-sphone" type="tel" inputmode="tel" value="${esc(s.parentPhone||"")}" placeholder="e.g. 9847000000"/></div>
+  <div class="form-group"><label class="form-label">Admission date <span class="text-muted" style="font-weight:400">(optional — for late admissions)</span></label><input id="m-sadmdate" type="date" value="${esc(s.admDate||"")}"/>
+  <div class="text-xs text-muted" style="margin-top:3px">Attendance is counted from this date. Leave blank to count from the first day.</div></div>
 </div>
 <div class="modal-footer">
   <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -3234,6 +3276,7 @@ function printAttBook() {
       const bg=isSun?"background:#fff0f0":isHol?"background:#fff3e0":"";
       if(isSun) return `<td style="${bg};border:1px solid #000;text-align:center;font-size:8px;color:#999">-</td>`;
       if(isHol) return `<td style="${bg};border:1px solid #000;text-align:center;font-size:8px;color:#e65100;font-weight:700">H</td>`;
+      if(s.admDate && dk(d)<s.admDate) return `<td style="background:#e0e0e0;border:1px solid #000;text-align:center;font-size:8px;color:#777">&ndash;</td>`;
       const r=(S.attendance[dk(d)]||{})[s.id]||{fn:"",an:""};
       const{t,c}=cellMark(r.fn,r.an);
       return `<td style="border:1px solid #000;text-align:center;font-size:9px;font-weight:900;color:${c}">${t}</td>`;
@@ -3362,7 +3405,7 @@ td{border:1px solid #000;padding:1px;height:18px;vertical-align:middle}
         Cumulative Possible: <strong>${totalCumPoss}</strong>
       </div>
       <div style="font-size:9px;">Year: <strong>${year}</strong></div>
-      <div style="font-size:9px;">Monthly Possible: <strong>${students.length>0?monthStats(students[0].id).poss:0}</strong></div>
+      <div style="font-size:9px;">Monthly Possible: <strong>${students.length>0?Math.max(...students.map(st=>monthStats(st.id).poss)):0}</strong></div>
     </div>
   </div>
   <table>
@@ -3703,6 +3746,7 @@ async function handleClick(e){
     const nm=document.getElementById("m-sname").value.trim().toUpperCase();
     const bid=document.getElementById("m-sbatch").value;
     const phone=document.getElementById("m-sphone").value.trim();
+    const admDate=(document.getElementById("m-sadmdate")?.value||"").trim();
     if(!nm||!bid){toast("Name and batch required","error");return;}
     // Check duplicate admission number within same batch
     const editingId = btn.dataset.id||"";
@@ -3714,10 +3758,10 @@ async function handleClick(e){
     try{
       const id=editingId||uid();
       const old=S.students.find(x=>x.id===id)||{};
-      const student={...old,id,adm,name:nm,batchId:bid,parentPhone:phone};
+      const student={...old,id,adm,name:nm,batchId:bid,parentPhone:phone,admDate};
       await saveStudentFS(student);
       if(!editingId) S.students.push(student);
-      else{const s=S.students.find(x=>x.id===editingId);if(s){s.adm=adm;s.name=nm;s.batchId=bid;s.parentPhone=phone;}}
+      else{const s=S.students.find(x=>x.id===editingId);if(s){s.adm=adm;s.name=nm;s.batchId=bid;s.parentPhone=phone;s.admDate=admDate;}}
       sortStudents();
       closeModal();refreshPage();toast("Student saved");
     }catch(e){toast(e.message,"error");}
@@ -3749,6 +3793,7 @@ async function handleClick(e){
     e.stopPropagation();
     const{sid,dk,sess,val}=btn.dataset;
     if(!guardNonWorking(dk)) return;
+    if(!guardNotAdmitted(sid,dk)) return;
     const cur=(S.attendance[dk]||{})[sid]||{fn:"",an:""};
     let fn=sess==="fn"?val:cur.fn;
     let an=sess==="an"?val:cur.an;
@@ -3969,6 +4014,7 @@ async function handleClick(e){
   if(a==="mark-both-val"){
     const{sid,dk,val}=btn.dataset;
     if(!guardNonWorking(dk)){closeModal();return;}
+    if(!guardNotAdmitted(sid,dk)){closeModal();return;}
     if(!S.attendance[dk])S.attendance[dk]={};
     S.attendance[dk][sid]={fn:val,an:val};
     closeModal();refreshPage();
@@ -3986,7 +4032,7 @@ async function handleClick(e){
     const d=Math.min(day,daysInMonth(year,month));
     const dk=`${year}-${pad(month+1)}-${pad(d)}`;
     if(!guardNonWorking(dk)) return;
-    const students=S.students.filter(s=>s.batchId===batchId);
+    const students=S.students.filter(s=>s.batchId===batchId&&!(s.admDate&&dk<s.admDate));
     if(!S.attendance[dk])S.attendance[dk]={};
     students.forEach(s=>S.attendance[dk][s.id]={fn:v,an:v});
     refreshPage();
@@ -4487,10 +4533,10 @@ function parentLinkModal() {
 function downloadTemplate(){
   // Build CSV with headers + batch names as guide
   const batchList = S.batches.map(b=>b.name).join(" / ");
-  const headers = ["Adm No","Name","Batch Name","Parent Phone"];
-  const guide   = ["2025001","STUDENT NAME (CAPS)","Batch name exactly as in app ("+batchList+")","9847000000"];
-  const sample1 = ["2025002","ARUN KUMAR K","","9847111111"];
-  const sample2 = ["2025003","BIJU M","","9847222222"];
+  const headers = ["Adm No","Name","Batch Name","Parent Phone","Admission Date (optional)"];
+  const guide   = ["2025001","STUDENT NAME (CAPS)","Batch name exactly as in app ("+batchList+")","9847000000","DD-MM-YYYY (leave blank if admitted from the start)"];
+  const sample1 = ["2025002","ARUN KUMAR K","","9847111111",""];
+  const sample2 = ["2025003","BIJU M","","9847222222","15-10-2026"];
 
   const rows = [headers, guide, sample1, sample2];
   const csv  = rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\r\n");
@@ -4613,9 +4659,10 @@ function parseRows(rows){
     const name  = String(row[1]||"").trim().toUpperCase();
     const batch = String(row[2]||"").trim();
     const phone = String(row[3]||"").trim();
+    const admDate = parseAdmDate(row[4]);
     if(!name||name==="STUDENT NAME (CAPS)")continue; // skip guide row
     if(adm==="2025002"||adm==="2025003")continue;    // skip sample rows
-    students.push({adm,name,batchName:batch,parentPhone:phone,_row:i+1});
+    students.push({adm,name,batchName:batch,parentPhone:phone,admDate,_row:i+1});
   }
   if(!students.length)throw new Error("No valid student rows found. Check your file format.");
   return students;
@@ -4643,6 +4690,7 @@ function renderImportPreview(rows){
       <td style="padding:6px 8px;font-size:12px;font-weight:600">${r.name}</td>
       <td style="padding:6px 8px;font-size:12px">${r.batchLabel}</td>
       <td style="padding:6px 8px;font-size:12px">${r.parentPhone||"&mdash;"}</td>
+      <td style="padding:6px 8px;font-size:12px">${r.admDate?fmtDMY(r.admDate):"&mdash;"}</td>
       <td style="padding:6px 8px;font-size:12px">${dup.find(d=>d.adm===r.adm)?'<span style="color:var(--danger);font-size:11px">Dup Adm</span>':""}</td>
     </tr>`).join("");
 
@@ -4662,6 +4710,7 @@ function renderImportPreview(rows){
         <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Name</th>
         <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Batch</th>
         <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Phone</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Admission</th>
         <th style="padding:6px 8px;text-align:left;border-bottom:1px solid var(--border)">Note</th>
       </tr>
     </thead>
@@ -4689,7 +4738,7 @@ window.doImport=async function doImport(){
     toImport.forEach(r=>{
       const id=uid();
       const batchId=r.batchId||defBatchId;
-      const obj={id,name:r.name,adm:r.adm,batchId,parentPhone:r.parentPhone||""};
+      const obj={id,name:r.name,adm:r.adm,batchId,parentPhone:r.parentPhone||"",admDate:r.admDate||""};
       wbatch.set(studentRef(id),obj);
       newStus.push(obj);
     });
